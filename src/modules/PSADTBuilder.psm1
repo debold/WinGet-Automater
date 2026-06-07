@@ -45,10 +45,14 @@ function Get-PSADTFramework {
     Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
     Remove-Item $zipPath
 
-    # Copy all top-level contents from the zip's root folder to the cache path.
-    # PSADT v4 Template has everything at root: PSAppDeployToolkit\, Config\, Assets\, etc.
-    $topLevel = Get-ChildItem $extractPath -Directory | Select-Object -First 1
-    $srcRoot  = if ($topLevel) { $topLevel.FullName } else { $extractPath }
+    # PSADT v4 Template zip is flat (content at root, no wrapping folder).
+    # Some older zips wrap content in a single subdirectory — handle both.
+    $srcRoot = if (Test-Path (Join-Path $extractPath 'PSAppDeployToolkit')) {
+        $extractPath          # flat zip
+    } else {
+        $sub = Get-ChildItem $extractPath -Directory | Select-Object -First 1
+        if ($sub) { $sub.FullName } else { $extractPath }
+    }
     Get-ChildItem $srcRoot | Copy-Item -Destination $psadtPath -Recurse -Force
     Remove-Item $extractPath -Recurse -Force
 
@@ -146,12 +150,11 @@ function Set-PSADTBranding {
         }
     }
 
-    # ── Banner image → Assets\ ────────────────────────────────────────────────
+    # ── Banner image → Assets\Banner.Classic.png ─────────────────────────────
     if (-not [string]::IsNullOrWhiteSpace($Branding.bannerImagePath)) {
         $src = $Branding.bannerImagePath
         if (Test-Path $src) {
-            $ext  = [System.IO.Path]::GetExtension($src)
-            $dest = Join-Path $assetsFolder "AppDeployToolkitBanner$ext"
+            $dest = Join-Path $assetsFolder 'Banner.Classic.png'
             New-Item -ItemType Directory -Path $assetsFolder -Force | Out-Null
             Copy-Item $src -Destination $dest -Force
             Write-Verbose "Branding: banner → $dest"
@@ -160,11 +163,11 @@ function Set-PSADTBranding {
         }
     }
 
-    # ── Icon file → Assets\ ───────────────────────────────────────────────────
+    # ── App icon → Assets\AppIcon.png ────────────────────────────────────────
     if (-not [string]::IsNullOrWhiteSpace($Branding.iconPath)) {
         $src = $Branding.iconPath
         if (Test-Path $src) {
-            $dest = Join-Path $assetsFolder 'AppDeployToolkitIcon.ico'
+            $dest = Join-Path $assetsFolder 'AppIcon.png'
             New-Item -ItemType Directory -Path $assetsFolder -Force | Out-Null
             Copy-Item $src -Destination $dest -Force
             Write-Verbose "Branding: icon → $dest"
