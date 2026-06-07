@@ -130,6 +130,47 @@ function Get-WinGetManifest {
     return $result
 }
 
+function Get-WinGetLatestVersion {
+    <#
+    .SYNOPSIS
+        Returns only the latest version string for a WinGet package without fetching the full manifest.
+        Much faster than Get-WinGetManifest – suitable for bulk update checks.
+    .OUTPUTS
+        Version string, e.g. "24.3.20112.0"
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[A-Za-z0-9][\w.-]+\.[A-Za-z0-9][\w.-]+$')]
+        [string]$PackageId,
+
+        [string]$GitHubToken
+    )
+
+    $headers = @{ 'User-Agent' = 'WinGet-Automater/1.0' }
+    if ($GitHubToken) { $headers['Authorization'] = "token $GitHubToken" }
+
+    $idParts      = $PackageId -split '\.'
+    $firstLetter  = $idParts[0][0].ToString().ToLower()
+    $manifestBase = "manifests/$firstLetter/$($idParts -join '/')"
+    $repoBase     = 'https://api.github.com/repos/microsoft/winget-pkgs/contents'
+
+    try {
+        $resp = Invoke-RestMethod -Uri "$repoBase/$manifestBase" -Headers $headers -ErrorAction Stop
+    } catch {
+        throw "Package '$PackageId' not found in the WinGet repository."
+    }
+
+    $latest = $resp |
+        Where-Object { $_.type -eq 'dir' } |
+        Sort-Object { try { [version]($_.name -replace '[^0-9.]') } catch { [version]'0.0' } } -Descending |
+        Select-Object -First 1 -ExpandProperty name
+
+    if (-not $latest) { throw "No versions found for '$PackageId'." }
+    return $latest
+}
+
 function Get-WinGetInstallerFileName {
     [CmdletBinding()]
     param(
@@ -154,4 +195,4 @@ function Get-WinGetInstallerFileName {
     return "setup_$safeName$ext"
 }
 
-Export-ModuleMember -Function Get-WinGetManifest, Get-WinGetInstallerFileName
+Export-ModuleMember -Function Get-WinGetManifest, Get-WinGetLatestVersion, Get-WinGetInstallerFileName

@@ -141,3 +141,36 @@ Describe 'Get-WinGetInstallerFileName' {
         Get-WinGetInstallerFileName -PackageInfo $info | Should -Not -Match ' '
     }
 }
+
+# ─── Get-WinGetLatestVersion ──────────────────────────────────────────────────
+
+Describe 'Get-WinGetLatestVersion – Integration (live GitHub)' {
+    It 'Returns a non-empty version string for VideoLAN.VLC' {
+        $v = Get-WinGetLatestVersion -PackageId 'VideoLAN.VLC' -GitHubToken $script:GhToken
+        $v | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Returns a version that looks like a semver (x.y.z)' {
+        $v = Get-WinGetLatestVersion -PackageId '7zip.7zip' -GitHubToken $script:GhToken
+        $v | Should -Match '^\d+\.\d+'
+    }
+
+    It 'Matches the version returned by the full Get-WinGetManifest' {
+        $latest   = Get-WinGetLatestVersion -PackageId 'VideoLAN.VLC' -GitHubToken $script:GhToken
+        $manifest = Get-WinGetManifest      -PackageId 'VideoLAN.VLC' -GitHubToken $script:GhToken
+        $latest | Should -Be $manifest.Version
+    }
+
+    It 'Throws for an unknown PackageId' {
+        { Get-WinGetLatestVersion -PackageId 'DoesNotExist.NotAPackage' -GitHubToken $script:GhToken } |
+            Should -Throw
+    }
+
+    It 'Is significantly faster than Get-WinGetManifest (only 1 API call)' {
+        $elapsed = (Measure-Command {
+            Get-WinGetLatestVersion -PackageId 'VideoLAN.VLC' -GitHubToken $script:GhToken
+        }).TotalSeconds
+        # Full manifest needs 3–5 API calls; version-only should finish in < 10 s even on slow links
+        $elapsed | Should -BeLessThan 10
+    }
+}

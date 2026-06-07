@@ -18,6 +18,12 @@
 .PARAMETER OutputPath
     Override the output directory for built packages (overrides config.build.outputPath).
 
+.PARAMETER Sync
+    Check each package for a newer version in WinGet before building.
+    Only packages where WinGet has a higher version than what is currently deployed in Intune
+    are built and uploaded. Packages already at the latest version are skipped.
+    Requires Intune credentials. Combine with -Review or -Verbose for more detail.
+
 .PARAMETER SkipUpload
     Build the package only; skip the Intune upload step.
 
@@ -47,6 +53,11 @@
     # Same as above, but pauses for inspection before packaging and upload.
 
 .EXAMPLE
+    .\Invoke-WinGetAutomater.ps1 -AppsFile "config\apps.json" -Sync
+    # Checks all managed packages for updates. Only those with a newer WinGet version
+    # than what is currently in Intune are built and uploaded automatically.
+
+.EXAMPLE
     .\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC"
 
 .EXAMPLE
@@ -73,6 +84,7 @@ param(
     [string]$ConfigFile         = (Join-Path $PSScriptRoot '..\config\config.json'),
     [string]$OutputPath,
     [string]$CustomizationsPath = (Join-Path $PSScriptRoot '..\customizations'),
+    [switch]$Sync,
     [switch]$SkipUpload,
     [switch]$Review,
     [switch]$Force,
@@ -152,9 +164,40 @@ foreach ($pkg in $packages) {
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 
     try {
-        # 1 – Fetch WinGet manifest
+        $ghToken = if ($cfg.github.token -and $cfg.github.token -notlike '*<*') { $cfg.github.token } else { $null }
+
+        # 0 – Sync pre-check: compare WinGet latest vs. Intune current (fast, no installer download)
+        if ($Sync) {
+            Write-Host "[0/4] Checking latest WinGet version..."
+            $latestVersion  = Get-WinGetLatestVersion -PackageId $pkgId -GitHubToken $ghToken
+            $existingInSync = Find-ExistingIntuneApp -Token $token -DisplayName $pkgId
+
+            # Try to match by PackageId prefix if display name lookup is empty
+            if ($existingInSync.Count -eq 0) {
+                $existingInSync = Find-ExistingIntuneApp -Token $token -DisplayName ($pkgId -split '\.')[-1]
+            }
+
+            $intuneVersion = if ($existingInSync.Count -gt 0) {
+                ($existingInSync | Sort-Object displayVersion -Descending | Select-Object -First 1).displayVersion
+            } else { '0.0' }
+
+            $cmpSync = Compare-AppVersion -NewVersion $latestVersion -ExistingVersion $intuneVersion
+
+            if ($cmpSync -le 0) {
+                $symbol = if ($cmpSync -eq 0) { '✓' } else { '↓' }
+                Write-Host "$symbol $pkgId — Intune: $intuneVersion  WinGet: $latestVersion  (up to date)" -ForegroundColor Green
+                $results.Add([PSCustomObject]@{
+                    PackageId = $pkgId; Version = $intuneVersion
+                    Status = 'UpToDate'; WinGetVersion = $latestVersion
+                })
+                continue
+            }
+
+            Write-Host "↑ $pkgId — Intune: $intuneVersion  →  WinGet: $latestVersion  (update available)" -ForegroundColor Yellow
+        }
+
+        # 1 – Fetch WinGet manifest (full, downloads metadata for build)
         Write-Host "[1/4] Fetching WinGet manifest..."
-        $ghToken     = if ($cfg.github.token -and $cfg.github.token -notlike '*<*') { $cfg.github.token } else { $null }
         $packageInfo = Get-WinGetManifest -PackageId $pkgId `
             -Version ($pkg.Version ?? $null) -GitHubToken $ghToken
 
@@ -301,7 +344,7 @@ foreach ($pkg in $packages) {
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 $ok    = ($results | Where-Object Status -in 'Uploaded','Updated','Redeployed','Built').Count
-$skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped').Count
+$skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped','UpToDate').Count
 $fail  = ($results | Where-Object Status -eq 'Error').Count
 
 Write-Host "`n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan

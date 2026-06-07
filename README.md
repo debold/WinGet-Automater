@@ -225,6 +225,30 @@ Nützlich zum Testen des Paketbaus ohne Intune-Zugang.
 .\src\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC" -SkipUpload -OutputPath "C:\IntunePackages"
 ```
 
+### Update-Check und automatisches Deployment (Sync)
+
+`-Sync` prüft für jedes Paket, ob WinGet eine neuere Version kennt als die in Intune deployte. Pakete die bereits aktuell sind werden übersprungen, für Pakete mit Update wird automatisch der komplette Build- und Upload-Prozess angestoßen.
+
+```powershell
+# Alle Pakete in apps.json auf Updates prüfen und ggf. deployen
+.\src\Invoke-WinGetAutomater.ps1 -AppsFile "config\apps.json" -Sync
+```
+
+Beispiel-Ausgabe:
+
+```
+✓ VideoLAN.VLC        — Intune: 3.0.21   WinGet: 3.0.21   (up to date)
+↑ Adobe.Acrobat.Reader — Intune: 24.1.0  →  WinGet: 24.3.0 (update available)
+✓ 7zip.7zip           — Intune: 24.8.0   WinGet: 24.8.0   (up to date)
+
+[1/4] Fetching WinGet manifest...  (Adobe.Acrobat.Reader 24.3.0)
+[2/4] Building PSADT v4 package...
+...
+```
+
+> **Tipp für automatisierte Umgebungen:** `-Sync` lässt sich als geplanter Task oder CI/CD-Job einrichten.
+> Mit einem GitHub-Token (`config.github.token`) bleibt man unter dem API-Rate-Limit auch bei vielen Paketen.
+
 ### Batch-Modus
 
 ```powershell
