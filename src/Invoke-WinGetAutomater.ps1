@@ -21,6 +21,10 @@
 .PARAMETER SkipUpload
     Build the package only; skip the Intune upload step.
 
+.PARAMETER Review
+    Pause after building the PSADT package and wait for confirmation before packaging and upload.
+    Opens the package folder (Explorer on Windows) so you can inspect and edit Deploy-Application.ps1.
+
 .PARAMETER Force
     Re-build even if the package folder already exists (overwrites).
 
@@ -32,6 +36,11 @@
 
 .EXAMPLE
     .\Invoke-WinGetAutomater.ps1 -PackageId "Mozilla.Firefox" -SkipUpload -OutputPath "C:\Packages"
+
+.EXAMPLE
+    .\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC" -Review
+    # Pauses after the PSADT package is built, opens the folder in Explorer,
+    # and waits for confirmation before packaging (.intunewin) and Intune upload.
 #>
 #Requires -Version 7.0
 
@@ -46,6 +55,7 @@ param(
     [string]$ConfigFile  = (Join-Path $PSScriptRoot '..\config\config.json'),
     [string]$OutputPath,
     [switch]$SkipUpload,
+    [switch]$Review,
     [switch]$Force
 )
 
@@ -140,6 +150,47 @@ foreach ($pkg in $packages) {
                 -PSADTVersion ($cfg.build.psadtVersion ?? '4.0.4')
         }
 
+        # 2b – Review pause
+        if ($Review) {
+            $deployScript = Join-Path $packageFolder 'Deploy-Application.ps1'
+            Write-Host ""
+            Write-Host "  ┌─────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
+            Write-Host "  │  REVIEW MODE – Inspect and edit before packaging        │" -ForegroundColor Yellow
+            Write-Host "  ├─────────────────────────────────────────────────────────┤" -ForegroundColor Yellow
+            Write-Host "  │  Package folder:                                        │" -ForegroundColor Yellow
+            Write-Host "  │  $packageFolder" -ForegroundColor Cyan
+            Write-Host "  │                                                         │" -ForegroundColor Yellow
+            Write-Host "  │  Main script:                                           │" -ForegroundColor Yellow
+            Write-Host "  │  $deployScript" -ForegroundColor Cyan
+            Write-Host "  └─────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
+            Write-Host ""
+
+            # Try to open the package folder for easy editing
+            if ($IsWindows) {
+                Start-Process explorer.exe $packageFolder -ErrorAction SilentlyContinue
+            } elseif ($IsMacOS) {
+                Start-Process open $packageFolder -ErrorAction SilentlyContinue
+            }
+
+            $response = ''
+            while ($response -notin @('', 's', 'skip', 'a', 'abort')) {
+                $response = (Read-Host "  Press [Enter] to continue, [S] to skip this package, [A] to abort all").Trim().ToLower()
+            }
+
+            if ($response -in @('a', 'abort')) {
+                Write-Host "Aborted by user." -ForegroundColor Red
+                break
+            }
+            if ($response -in @('s', 'skip')) {
+                Write-Host "Skipped: $pkgId" -ForegroundColor Yellow
+                $results.Add([PSCustomObject]@{
+                    PackageId = $pkgId; Version = $packageInfo.Version
+                    Status    = 'Skipped'
+                })
+                continue
+            }
+        }
+
         # 3 – Create .intunewin
         Write-Host "[3/4] Packaging with IntuneWinAppUtil..."
         $intuneWinDir  = Join-Path (Split-Path $packageFolder -Parent) 'intunewin'
@@ -222,7 +273,7 @@ foreach ($pkg in $packages) {
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 $ok    = ($results | Where-Object Status -in 'Uploaded','Updated','Built').Count
-$skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists').Count
+$skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped').Count
 $fail  = ($results | Where-Object Status -eq 'Error').Count
 
 Write-Host "`n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
