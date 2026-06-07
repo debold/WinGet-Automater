@@ -12,9 +12,6 @@ BeforeDiscovery {
     # Module must be loaded during discovery so InModuleScope blocks are resolvable.
     Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
 
-    # Invoke-IntuneWinPackaging tests require the real tool binary.
-    $script:IntuneWinToolPath = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
-    $script:SkipIntuneWin     = -not (Test-Path $script:IntuneWinToolPath)
 }
 
 BeforeAll {
@@ -570,11 +567,21 @@ Describe 'Set-PSADTBranding' {
 # Requires tools\IntuneWinAppUtil.exe. Run .\tools\Get-IntuneWinAppUtil.ps1 first.
 # The entire Describe is skipped automatically when the tool is absent.
 
-Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' -Skip:$script:SkipIntuneWin {
+Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' {
     BeforeAll {
         $script:TempOut5  = Join-Path $env:TEMP "PSADTTest_$(New-Guid)"
         $script:TempWin5  = Join-Path $env:TEMP "IntuneWin_$(New-Guid)"
         $script:ToolPath5 = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
+
+        if (-not (Test-Path $script:ToolPath5)) {
+            Write-Host 'Downloading IntuneWinAppUtil.exe...' -ForegroundColor Cyan
+            New-Item -ItemType Directory -Path (Split-Path $script:ToolPath5 -Parent) -Force | Out-Null
+            Invoke-WebRequest `
+                -Uri 'https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool/raw/master/IntuneWinAppUtil.exe' `
+                -OutFile $script:ToolPath5 `
+                -UseBasicParsing
+            Write-Host "Downloaded to: $script:ToolPath5" -ForegroundColor Green
+        }
 
         $script:PackageInfo5 = [ordered]@{
             PackageId         = 'Test.Package'
