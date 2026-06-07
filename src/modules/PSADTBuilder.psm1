@@ -14,12 +14,11 @@ function Get-PSADTFramework {
         [string]$CachePath = (Join-Path $env:TEMP 'PSADT-Cache')
     )
 
-    $psadtPath  = Join-Path $CachePath "PSADT-$Version"
-    $markerFile = Join-Path $psadtPath '.ready'
-    $adtFolder  = Join-Path $psadtPath 'AppDeployToolkit'
-    $mainFile   = Join-Path $adtFolder 'AppDeployToolkitMain.ps1'
+    $psadtPath   = Join-Path $CachePath "PSADT-$Version"
+    $markerFile  = Join-Path $psadtPath '.ready'
+    $moduleCheck = Join-Path $psadtPath 'PSAppDeployToolkit'
 
-    if ((Test-Path $markerFile) -and (Test-Path $mainFile)) {
+    if ((Test-Path $markerFile) -and (Test-Path $moduleCheck)) {
         Write-Verbose "Using cached PSADT $Version from $psadtPath"
         return $psadtPath
     }
@@ -33,8 +32,7 @@ function Get-PSADTFramework {
     New-Item -ItemType Directory -Path $psadtPath -Force | Out-Null
 
     $zipPath = "$psadtPath.zip"
-
-    $zipUrl = "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_Template_v4.zip"
+    $zipUrl  = "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_Template_v4.zip"
 
     try {
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
@@ -47,21 +45,15 @@ function Get-PSADTFramework {
     Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
     Remove-Item $zipPath
 
-    # Locate the AppDeployToolkit folder anywhere in the extracted archive
-    $found = Get-ChildItem $extractPath -Recurse -Directory -Filter 'AppDeployToolkit' | Select-Object -First 1
-    if ($found) {
-        Copy-Item $found.FullName -Destination $psadtPath -Recurse -Force
-    } else {
-        # Fallback: copy everything from the first top-level directory
-        $topLevel = Get-ChildItem $extractPath -Directory | Select-Object -First 1
-        if ($topLevel) {
-            Get-ChildItem $topLevel.FullName | Copy-Item -Destination $psadtPath -Recurse -Force
-        }
-    }
+    # Copy all top-level contents from the zip's root folder to the cache path.
+    # PSADT v4 Template has everything at root: PSAppDeployToolkit\, Config\, Assets\, etc.
+    $topLevel = Get-ChildItem $extractPath -Directory | Select-Object -First 1
+    $srcRoot  = if ($topLevel) { $topLevel.FullName } else { $extractPath }
+    Get-ChildItem $srcRoot | Copy-Item -Destination $psadtPath -Recurse -Force
     Remove-Item $extractPath -Recurse -Force
 
-    if (-not (Test-Path $mainFile)) {
-        throw "PSADT extraction failed: 'AppDeployToolkitMain.ps1' not found after unzipping."
+    if (-not (Test-Path $moduleCheck)) {
+        throw "PSADT extraction failed: 'PSAppDeployToolkit' module folder not found after unzipping."
     }
 
     New-Item -ItemType File -Path $markerFile -Force | Out-Null
@@ -136,10 +128,12 @@ function Set-PSADTBranding {
         [Parameter(Mandatory)] [PSCustomObject]$Branding
     )
 
-    $adtFolder  = Join-Path $PackagePath 'AppDeployToolkit'
-    $configFile = Join-Path $adtFolder 'AppDeployToolkitConfig.xml'
+    # PSADT v4 layout: Config\ holds the XML, Assets\ holds banner and icon
+    $configFolder = Join-Path $PackagePath 'Config'
+    $assetsFolder = Join-Path $PackagePath 'Assets'
+    $configFile   = Join-Path $configFolder 'AppDeployToolkitConfig.xml'
 
-    # ── Company name → AppDeployToolkitConfig.xml ────────────────────────────
+    # ── Company name → Config\AppDeployToolkitConfig.xml ─────────────────────
     if (-not [string]::IsNullOrWhiteSpace($Branding.companyName) -and (Test-Path $configFile)) {
         [xml]$xml = Get-Content $configFile -Encoding UTF8
         $node = $xml.SelectSingleNode('//Toolkit_CompanyName')
@@ -148,16 +142,17 @@ function Set-PSADTBranding {
             $xml.Save($configFile)
             Write-Verbose "Branding: companyName = '$($Branding.companyName)'"
         } else {
-            Write-Warning "Branding: <Toolkit_CompanyName> node not found in AppDeployToolkitConfig.xml — skipping."
+            Write-Warning "Branding: <Toolkit_CompanyName> node not found in Config\AppDeployToolkitConfig.xml — skipping."
         }
     }
 
-    # ── Banner image ──────────────────────────────────────────────────────────
+    # ── Banner image → Assets\ ────────────────────────────────────────────────
     if (-not [string]::IsNullOrWhiteSpace($Branding.bannerImagePath)) {
         $src = $Branding.bannerImagePath
         if (Test-Path $src) {
             $ext  = [System.IO.Path]::GetExtension($src)
-            $dest = Join-Path $adtFolder "AppDeployToolkitBanner$ext"
+            $dest = Join-Path $assetsFolder "AppDeployToolkitBanner$ext"
+            New-Item -ItemType Directory -Path $assetsFolder -Force | Out-Null
             Copy-Item $src -Destination $dest -Force
             Write-Verbose "Branding: banner → $dest"
         } else {
@@ -165,11 +160,12 @@ function Set-PSADTBranding {
         }
     }
 
-    # ── Icon file ─────────────────────────────────────────────────────────────
+    # ── Icon file → Assets\ ───────────────────────────────────────────────────
     if (-not [string]::IsNullOrWhiteSpace($Branding.iconPath)) {
         $src = $Branding.iconPath
         if (Test-Path $src) {
-            $dest = Join-Path $adtFolder 'AppDeployToolkitIcon.ico'
+            $dest = Join-Path $assetsFolder 'AppDeployToolkitIcon.ico'
+            New-Item -ItemType Directory -Path $assetsFolder -Force | Out-Null
             Copy-Item $src -Destination $dest -Force
             Write-Verbose "Branding: icon → $dest"
         } else {
@@ -223,12 +219,17 @@ function New-PSADTPackage {
     New-Item -ItemType Directory -Path (Join-Path $packageFolder 'Files')        -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $packageFolder 'SupportFiles') -Force | Out-Null
 
-    # Copy PSADT framework (remove first so Copy-Item doesn't nest on repeated builds)
+    # Copy PSADT framework to package root (v4 layout: PSAppDeployToolkit\, Config\, Assets\, etc.)
+    # Files\ and SupportFiles\ are managed by this script — skip them from the PSADT source.
     $psadtSource = Get-PSADTFramework -Version $PSADTVersion -CachePath $PSADTCachePath
-    $adtDest     = Join-Path $packageFolder 'AppDeployToolkit'
-    if (Test-Path $adtDest) { Remove-Item $adtDest -Recurse -Force }
-    Write-Verbose "Copying PSADT framework to $adtDest..."
-    Copy-Item -Path (Join-Path $psadtSource 'AppDeployToolkit') -Destination $adtDest -Recurse -Force
+    Write-Verbose "Copying PSADT framework to $packageFolder..."
+    Get-ChildItem $psadtSource |
+        Where-Object { $_.Name -notin @('Files', 'SupportFiles') } |
+        ForEach-Object {
+            $dest = Join-Path $packageFolder $_.Name
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+            Copy-Item $_.FullName -Destination $dest -Recurse -Force
+        }
 
     # Apply global branding (company name, banner, icon)
     if ($Branding) {
