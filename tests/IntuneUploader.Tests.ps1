@@ -6,6 +6,11 @@
   All Graph API and Azure Blob calls are mocked – no Intune tenant required.
 #>
 
+BeforeDiscovery {
+    # Module must be loaded during discovery so InModuleScope blocks are resolvable.
+    Import-Module (Join-Path $PSScriptRoot '../src/modules/IntuneUploader.psm1') -Force
+}
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '../src/modules/IntuneUploader.psm1') -Force
 }
@@ -129,11 +134,13 @@ Describe 'Get-GraphToken' {
             $token | Should -Be 'mock-bearer-token-xyz'
         }
         It 'Calls the tenant-specific token endpoint' {
+            Get-GraphToken -TenantId 'my-tenant' -ClientId 'my-client' -ClientSecret 'my-secret'
             Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
                 $Uri -like '*my-tenant*oauth2/v2.0/token*'
             }
         }
         It 'Requests the Graph default scope' {
+            Get-GraphToken -TenantId 'my-tenant' -ClientId 'my-client' -ClientSecret 'my-secret'
             Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
                 $Body.scope -eq 'https://graph.microsoft.com/.default'
             }

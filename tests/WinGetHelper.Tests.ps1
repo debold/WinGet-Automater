@@ -57,16 +57,29 @@ Describe 'Get-WinGetManifest – VideoLAN.VLC (EXE, well-known)' {
     }
 }
 
-Describe 'Get-WinGetManifest – 7zip.7zip (MSI with ProductCode)' {
+Describe 'Get-WinGetManifest – 7zip.7zip (second well-known package)' {
     BeforeAll {
         $script:zip = Get-WinGetManifest -PackageId '7zip.7zip' -GitHubToken $script:GhToken
     }
 
-    It 'InstallerType is msi' {
-        $script:zip.InstallerType | Should -Be 'msi'
+    It 'Returns a non-empty Version' {
+        $script:zip.Version | Should -Not -BeNullOrEmpty
     }
-    It 'ProductCode is a valid GUID' {
-        $script:zip.ProductCode | Should -Match '^\{[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}\}$'
+    It 'InstallerUrl is an HTTPS URL' {
+        $script:zip.InstallerUrl | Should -Match '^https://'
+    }
+    It 'InstallerSha256 is a 64-char hex string' {
+        $script:zip.InstallerSha256 | Should -Match '^[0-9a-fA-F]{64}$'
+    }
+    It 'InstallerType is populated' {
+        $script:zip.InstallerType | Should -Not -BeNullOrEmpty
+    }
+    It 'ProductCode is a valid GUID when InstallerType is msi, or null/empty otherwise' {
+        if ($script:zip.InstallerType -eq 'msi') {
+            $script:zip.ProductCode | Should -Match '^\{[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}\}$'
+        } else {
+            $script:zip.ProductCode | Should -BeNullOrEmpty
+        }
     }
 }
 

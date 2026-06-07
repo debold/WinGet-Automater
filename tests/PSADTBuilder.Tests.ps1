@@ -7,6 +7,11 @@
   The template file at templates/Deploy-Application.ps1.template is read from disk.
 #>
 
+BeforeDiscovery {
+    # Module must be loaded during discovery so InModuleScope blocks are resolvable.
+    Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
+}
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
     $script:TemplatePath = Join-Path $PSScriptRoot '../templates/Deploy-Application.ps1.template'
