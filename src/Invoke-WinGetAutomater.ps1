@@ -33,6 +33,19 @@
 .PARAMETER Force
     Re-build even if the package folder already exists (overwrites).
 
+.PARAMETER Redeploy
+    Rebuild the package locally and upload new content to Intune even if the same version
+    already exists. Intended for iterative testing of customizations. Implies -Force.
+
+.EXAMPLE
+    .\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy
+    # Rebuilds the package and pushes a new content version to Intune, bypassing the
+    # version check. Use during customization development to re-test without a version bump.
+
+.EXAMPLE
+    .\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy -Review
+    # Same as above, but pauses for inspection before packaging and upload.
+
 .EXAMPLE
     .\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC"
 
@@ -62,7 +75,8 @@ param(
     [string]$CustomizationsPath = (Join-Path $PSScriptRoot '..\customizations'),
     [switch]$SkipUpload,
     [switch]$Review,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Redeploy
 )
 
 Set-StrictMode -Version Latest
@@ -147,8 +161,8 @@ foreach ($pkg in $packages) {
         # 2 – Build PSADT package
         $packageFolder = Join-Path $resolvedOut $pkgId $packageInfo.Version
 
-        if ((Test-Path $packageFolder) -and -not $Force) {
-            Write-Host "[2/4] Package folder already exists, skipping build (use -Force to rebuild)." -ForegroundColor Yellow
+        if ((Test-Path $packageFolder) -and -not $Force -and -not $Redeploy) {
+            Write-Host "[2/4] Package folder already exists, skipping build (use -Force or -Redeploy to rebuild)." -ForegroundColor Yellow
         } else {
             Write-Host "[2/4] Building PSADT v4 package..."
             $packageFolder = New-PSADTPackage -PackageInfo $packageInfo `
@@ -226,15 +240,19 @@ foreach ($pkg in $packages) {
             $latest = $existingApps | Sort-Object displayVersion -Descending | Select-Object -First 1
             $cmp    = Compare-AppVersion -NewVersion $packageInfo.Version -ExistingVersion ($latest.displayVersion ?? '0.0')
 
-            if ($cmp -eq 0) {
-                Write-Host "Version $($packageInfo.Version) already exists in Intune. Skipping upload." -ForegroundColor Yellow
+            if ($Redeploy) {
+                Write-Host "Redeploy: pushing new content for version $($packageInfo.Version) (existing: $($latest.displayVersion))." -ForegroundColor Cyan
+                $existingAppId = $latest.id
+            }
+            elseif ($cmp -eq 0) {
+                Write-Host "Version $($packageInfo.Version) already exists in Intune. Skipping upload (use -Redeploy to push new content)." -ForegroundColor Yellow
                 $results.Add([PSCustomObject]@{
                     PackageId = $pkgId; Version = $packageInfo.Version
                     Status = 'AlreadyExists'; AppId = $latest.id
                 })
                 continue
             }
-            if ($cmp -lt 0) {
+            elseif ($cmp -lt 0) {
                 Write-Host "Newer version already in Intune ($($latest.displayVersion)). Skipping." -ForegroundColor Yellow
                 $results.Add([PSCustomObject]@{
                     PackageId = $pkgId; Version = $packageInfo.Version
@@ -242,9 +260,10 @@ foreach ($pkg in $packages) {
                 })
                 continue
             }
-
-            Write-Host "Updating $($latest.displayVersion) → $($packageInfo.Version)"
-            $existingAppId = $latest.id
+            else {
+                Write-Host "Updating $($latest.displayVersion) → $($packageInfo.Version)"
+                $existingAppId = $latest.id
+            }
         }
 
         $uploadResult = Publish-IntuneWin32App -Token $token `
@@ -261,7 +280,9 @@ foreach ($pkg in $packages) {
 
         $results.Add([PSCustomObject]@{
             PackageId = $pkgId; Version = $packageInfo.Version
-            Status    = if ($existingAppId) { 'Updated' } else { 'Uploaded' }
+            Status    = if ($Redeploy -and $existingAppId) { 'Redeployed' }
+                        elseif ($existingAppId)             { 'Updated' }
+                        else                                { 'Uploaded' }
             AppId     = $uploadResult.AppId
         })
 
@@ -279,7 +300,7 @@ foreach ($pkg in $packages) {
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
-$ok    = ($results | Where-Object Status -in 'Uploaded','Updated','Built').Count
+$ok    = ($results | Where-Object Status -in 'Uploaded','Updated','Redeployed','Built').Count
 $skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped').Count
 $fail  = ($results | Where-Object Status -eq 'Error').Count
 

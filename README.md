@@ -240,10 +240,31 @@ Nützlich zum Testen des Paketbaus ohne Intune-Zugang.
 
 ### Paket neu bauen (Force)
 
-Wenn der Paketordner bereits existiert, wird der Build-Schritt standardmäßig übersprungen. `-Force` erzwingt einen Neubau.
+Wenn der Paketordner bereits existiert, wird der Build-Schritt standardmäßig übersprungen. `-Force` erzwingt einen Neubau, lädt aber nicht erneut hoch wenn dieselbe Version schon in Intune vorhanden ist.
 
 ```powershell
 .\src\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC" -Force
+```
+
+### Customizations neu deployen (Redeploy)
+
+Baut das Paket neu **und** lädt es in Intune hoch, auch wenn dieselbe Version bereits existiert. Gedacht für die iterative Entwicklung von Customizations: Anpassung ändern → `-Redeploy` → in Intune testen → wiederholen.
+
+```powershell
+# Customization geändert, neu paketieren und direkt hochladen
+.\src\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy
+
+# Mit Review-Pause vor dem Upload
+.\src\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy -Review
+```
+
+Der typische Entwicklungs-Loop:
+
+```
+1. customizations/Adobe.Acrobat.Reader/PostInstall.ps1 anpassen
+2. .\src\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy
+3. In Intune testen → Gerät synchronisieren lassen
+4. Falls nötig: zurück zu 1.
 ```
 
 ---
@@ -504,12 +525,12 @@ output/
 
 ## Versionspolitik
 
-| Situation | Verhalten |
-|---|---|
-| App noch nicht in Intune vorhanden | Neue App anlegen und hochladen |
-| Identische Version bereits vorhanden | Überspringen (kein erneuter Upload) |
-| Ältere Version vorhanden | Vorhandene App aktualisieren (neue Content Version) |
-| Neuere Version bereits vorhanden | Überspringen mit Hinweis |
+| Situation | Normalverhalten | Mit `-Redeploy` |
+|---|---|---|
+| App noch nicht in Intune vorhanden | Neue App anlegen und hochladen | Gleich |
+| Identische Version bereits vorhanden | Überspringen | Neue Content Version hochladen |
+| Ältere Version vorhanden | Vorhandene App aktualisieren | Neue Content Version hochladen |
+| Neuere Version bereits vorhanden | Überspringen mit Hinweis | Überspringen mit Hinweis |
 
 ---
 
