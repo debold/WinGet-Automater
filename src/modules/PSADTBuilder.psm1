@@ -251,19 +251,21 @@ function New-PSADTPackage {
     }
 
     # Inject extra files from customizations\<PackageId>\Files\ and SupportFiles\
-    foreach ($subFolder in @('Files', 'SupportFiles')) {
-        $srcDir  = Join-Path (Join-Path $CustomizationsPath $PackageInfo.PackageId) $subFolder
-        $destDir = Join-Path $packageFolder $subFolder
-        if (Test-Path $srcDir) {
-            $items = Get-ChildItem $srcDir -Recurse -File
-            foreach ($item in $items) {
-                $rel  = $item.FullName.Substring($srcDir.Length).TrimStart('\', '/')
-                $dest = Join-Path $destDir $rel
-                New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null
-                Copy-Item $item.FullName -Destination $dest -Force
-                Write-Host "  + $subFolder\$rel" -ForegroundColor DarkCyan
+    if ($CustomizationsPath) {
+        foreach ($subFolder in @('Files', 'SupportFiles')) {
+            $srcDir  = Join-Path (Join-Path $CustomizationsPath $PackageInfo.PackageId) $subFolder
+            $destDir = Join-Path $packageFolder $subFolder
+            if (Test-Path $srcDir) {
+                $items = Get-ChildItem $srcDir -Recurse -File
+                foreach ($item in $items) {
+                    $rel  = [System.IO.Path]::GetRelativePath($srcDir, $item.FullName)
+                    $dest = Join-Path $destDir $rel
+                    New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null
+                    Copy-Item $item.FullName -Destination $dest -Force
+                    Write-Host "  + $subFolder\$rel" -ForegroundColor DarkCyan
+                }
+                Write-Verbose "Injected $($items.Count) file(s) into $subFolder\"
             }
-            Write-Verbose "Injected $($items.Count) file(s) into $subFolder\"
         }
     }
 
