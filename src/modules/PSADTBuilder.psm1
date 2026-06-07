@@ -28,9 +28,11 @@ function Get-PSADTFramework {
 
     $zipPath = "$psadtPath.zip"
 
-    # PSADT releases use either bare version tags (4.x.x) or v-prefixed tags (v4.x.x).
-    # Try both so the code works regardless of which convention the release uses.
+    # PSADT v4.1+ uses a fixed filename; older releases used a version-stamped filename.
+    # Try all known combinations so the code works across release generations.
     $candidateUrls = @(
+        "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_Template_v4.zip"
+        "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/v$Version/PSAppDeployToolkit_Template_v4.zip"
         "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_$Version.zip"
         "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/v$Version/PSAppDeployToolkit_$Version.zip"
     )
