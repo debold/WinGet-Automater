@@ -223,9 +223,10 @@ function New-PSADTPackage {
     New-Item -ItemType Directory -Path (Join-Path $packageFolder 'Files')        -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $packageFolder 'SupportFiles') -Force | Out-Null
 
-    # Copy PSADT framework
+    # Copy PSADT framework (remove first so Copy-Item doesn't nest on repeated builds)
     $psadtSource = Get-PSADTFramework -Version $PSADTVersion -CachePath $PSADTCachePath
     $adtDest     = Join-Path $packageFolder 'AppDeployToolkit'
+    if (Test-Path $adtDest) { Remove-Item $adtDest -Recurse -Force }
     Write-Verbose "Copying PSADT framework to $adtDest..."
     Copy-Item -Path (Join-Path $psadtSource 'AppDeployToolkit') -Destination $adtDest -Recurse -Force
 
