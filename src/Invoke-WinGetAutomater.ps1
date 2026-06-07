@@ -287,7 +287,7 @@ foreach ($pkg in $packages) {
 
         # 3 – Create .intunewin
         Write-Host "[3/4] Packaging with IntuneWinAppUtil..."
-        $intuneWinDir  = Join-Path (Split-Path $packageFolder -Parent) 'intunewin'
+        $intuneWinDir  = Join-Path (Split-Path $packageFolder -Parent) 'intunewin' $packageInfo.Version
         $intuneWinPath = Invoke-IntuneWinPackaging -PackagePath $packageFolder `
             -ToolPath $toolsPath -OutputPath $intuneWinDir
 
