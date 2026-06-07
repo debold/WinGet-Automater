@@ -298,20 +298,22 @@ function New-PSADTPackage {
     }
 
     $script = Get-Content $TemplatePath -Raw
-    $script = $script -replace '{{PACKAGE_ID}}',        $PackageInfo.PackageId
-    $script = $script -replace '{{PUBLISHER}}',         ($PackageInfo.Publisher  -replace "'", "''")
-    $script = $script -replace '{{APP_NAME}}',          ($PackageInfo.Name       -replace "'", "''")
-    $script = $script -replace '{{VERSION}}',           $PackageInfo.Version
-    $script = $script -replace '{{ARCHITECTURE}}',      $PackageInfo.Architecture
-    $script = $script -replace '{{SETUP_FILE}}',        $installerFileName
-    $script = $script -replace '{{CLOSE_APPS}}',        $closeApps
-    $script = $script -replace '{{INSTALL_BLOCK}}',     $installBlock
-    $script = $script -replace '{{UNINSTALL_BLOCK}}',   $uninstallBlock
-    $script = $script -replace '{{REPAIR_BLOCK}}',      $repairBlock
-    $script = $script -replace '{{PRE_INSTALL_BLOCK}}',    $customization.PreInstall
-    $script = $script -replace '{{POST_INSTALL_BLOCK}}',   $customization.PostInstall
-    $script = $script -replace '{{PRE_UNINSTALL_BLOCK}}',  $customization.PreUninstall
-    $script = $script -replace '{{POST_UNINSTALL_BLOCK}}', $customization.PostUninstall
+    # Use .Replace() (literal) not -replace (regex) — replacement strings contain PS variables like $_ which
+    # regex interprets as backreferences (e.g. $_ = entire input string), corrupting the output.
+    $script = $script.Replace('{{PACKAGE_ID}}',           $PackageInfo.PackageId)
+    $script = $script.Replace('{{PUBLISHER}}',            ($PackageInfo.Publisher  -replace "'", "''"))
+    $script = $script.Replace('{{APP_NAME}}',             ($PackageInfo.Name       -replace "'", "''"))
+    $script = $script.Replace('{{VERSION}}',              $PackageInfo.Version)
+    $script = $script.Replace('{{ARCHITECTURE}}',         $PackageInfo.Architecture)
+    $script = $script.Replace('{{SETUP_FILE}}',           $installerFileName)
+    $script = $script.Replace('{{CLOSE_APPS}}',           $closeApps)
+    $script = $script.Replace('{{INSTALL_BLOCK}}',        $installBlock)
+    $script = $script.Replace('{{UNINSTALL_BLOCK}}',      $uninstallBlock)
+    $script = $script.Replace('{{REPAIR_BLOCK}}',         $repairBlock)
+    $script = $script.Replace('{{PRE_INSTALL_BLOCK}}',    $customization.PreInstall)
+    $script = $script.Replace('{{POST_INSTALL_BLOCK}}',   $customization.PostInstall)
+    $script = $script.Replace('{{PRE_UNINSTALL_BLOCK}}',  $customization.PreUninstall)
+    $script = $script.Replace('{{POST_UNINSTALL_BLOCK}}', $customization.PostUninstall)
 
     Set-Content -Path (Join-Path $packageFolder 'Deploy-Application.ps1') -Value $script -Encoding UTF8
 
@@ -349,11 +351,7 @@ function Get-PSADTInstallBlocks {
         default {
             $installArgs = if ($silentArgs) { $silentArgs } else { '/S' }
             $install     = "Start-ADTProcess -FilePath '$InstallerFileName' -ArgumentList '$installArgs' -WaitForMsiExec"
-            $uninstall   = if ($productCode) {
-                "Start-ADTProcess -FilePath 'msiexec.exe' -ArgumentList '/x $productCode /qn /norestart'"
-            } else {
-                "# TODO: Configure uninstall command for $($PackageInfo.Name)`n            # Example: Start-ADTProcess -FilePath 'C:\Program Files\...\uninstall.exe' -ArgumentList '/S'"
-            }
+            $uninstall   = "Uninstall-ADTApplication -Name '$($PackageInfo.Name)' -ApplicationType EXE"
             $repair      = "Start-ADTProcess -FilePath '$InstallerFileName' -ArgumentList '$installArgs' -WaitForMsiExec"
         }
     }
