@@ -142,15 +142,21 @@ $packages = if ($PSCmdlet.ParameterSetName -eq 'SinglePackage') {
     (Get-Content $AppsFile -Raw | ConvertFrom-Json).packages
 }
 
-# ─── Authenticate ─────────────────────────────────────────────────────────────
+# ─── Authenticate & pre-load Intune app list ──────────────────────────────────
 
-$token = $null
+$token          = $null
+$allIntuneApps  = @()
+
 if (-not $SkipUpload) {
     Write-Host "`nAuthenticating with Microsoft Graph..." -ForegroundColor Cyan
     $token = Get-GraphToken -TenantId     $cfg.auth.tenantId `
                             -ClientId     $cfg.auth.clientId `
                             -ClientSecret $cfg.auth.clientSecret
     Write-Host "Authentication successful." -ForegroundColor Green
+
+    Write-Host "Loading Win32 app inventory from Intune..." -ForegroundColor Cyan
+    $allIntuneApps = Get-AllIntuneWin32Apps -Token $token
+    Write-Host "$($allIntuneApps.Count) app(s) found in Intune." -ForegroundColor Green
 }
 
 # ─── Process each package ─────────────────────────────────────────────────────
@@ -170,16 +176,8 @@ foreach ($pkg in $packages) {
         if ($Sync) {
             Write-Host "[0/4] Checking latest WinGet version..."
             $latestVersion  = Get-WinGetLatestVersion -PackageId $pkgId -GitHubToken $ghToken
-            $existingInSync = Find-ExistingIntuneApp -Token $token -DisplayName $pkgId
-
-            # Try to match by PackageId prefix if display name lookup is empty
-            if ($existingInSync.Count -eq 0) {
-                $existingInSync = Find-ExistingIntuneApp -Token $token -DisplayName ($pkgId -split '\.')[-1]
-            }
-
-            $intuneVersion = if ($existingInSync.Count -gt 0) {
-                ($existingInSync | Sort-Object displayVersion -Descending | Select-Object -First 1).displayVersion
-            } else { '0.0' }
+            $existingInSync = Find-IntuneAppByPackageId -Apps $allIntuneApps -PackageId $pkgId
+            $intuneVersion  = if ($existingInSync) { $existingInSync.displayVersion ?? '0.0' } else { '0.0' }
 
             $cmpSync = Compare-AppVersion -NewVersion $latestVersion -ExistingVersion $intuneVersion
 
@@ -276,11 +274,11 @@ foreach ($pkg in $packages) {
         Write-Host "[4/4] Uploading to Intune..."
 
         # Version policy: skip or update existing
-        $existingApps = Find-ExistingIntuneApp -Token $token -DisplayName $packageInfo.Name
+        $existingApp   = Find-IntuneAppByPackageId -Apps $allIntuneApps -PackageId $pkgId
         $existingAppId = $null
 
-        if ($existingApps.Count -gt 0) {
-            $latest = $existingApps | Sort-Object displayVersion -Descending | Select-Object -First 1
+        if ($existingApp) {
+            $latest = $existingApp
             $cmp    = Compare-AppVersion -NewVersion $packageInfo.Version -ExistingVersion ($latest.displayVersion ?? '0.0')
 
             if ($Redeploy) {

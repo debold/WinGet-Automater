@@ -290,6 +290,114 @@ Describe 'New-Win32LobAppBody – architecture mapping' {
     }
 }
 
+# ─── Get-AllIntuneWin32Apps ───────────────────────────────────────────────────
+
+Describe 'Get-AllIntuneWin32Apps' {
+
+    Context 'Single page of results' {
+        BeforeAll {
+            Mock -ModuleName IntuneUploader Invoke-RestMethod {
+                return [PSCustomObject]@{
+                    value = @(
+                        [PSCustomObject]@{ id = 'app-001'; displayName = 'VLC media player'; notes = 'WinGet-PackageId: VideoLAN.VLC' }
+                        [PSCustomObject]@{ id = 'app-002'; displayName = '7-Zip 24.08';       notes = 'WinGet-PackageId: 7zip.7zip' }
+                    )
+                }
+            }
+            $script:apps = Get-AllIntuneWin32Apps -Token 'test-token'
+        }
+
+        It 'Returns all apps from the page' {
+            $script:apps.Count | Should -Be 2
+        }
+        It 'Queries the win32LobApp endpoint' {
+            Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
+                $Uri -like '*win32LobApp*'
+            }
+        }
+        It 'Requests the notes field' {
+            Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
+                $Uri -match '\$select=.*notes'
+            }
+        }
+    }
+
+    Context 'Paginated results (@odata.nextLink)' {
+        BeforeAll {
+            $script:callCount = 0
+            Mock -ModuleName IntuneUploader Invoke-RestMethod {
+                $script:callCount++
+                if ($script:callCount -eq 1) {
+                    return [PSCustomObject]@{
+                        value              = @([PSCustomObject]@{ id = 'app-001'; displayName = 'App1'; notes = '' })
+                        '@odata.nextLink'  = 'https://graph.microsoft.com/next-page'
+                    }
+                } else {
+                    return [PSCustomObject]@{
+                        value = @([PSCustomObject]@{ id = 'app-002'; displayName = 'App2'; notes = '' })
+                    }
+                }
+            }
+            $script:apps = Get-AllIntuneWin32Apps -Token 'test-token'
+        }
+
+        It 'Follows nextLink and returns all apps from both pages' {
+            $script:apps.Count | Should -Be 2
+        }
+        It 'Made exactly two API calls' {
+            $script:callCount | Should -Be 2
+        }
+    }
+}
+
+# ─── Find-IntuneAppByPackageId ────────────────────────────────────────────────
+
+Describe 'Find-IntuneAppByPackageId' {
+
+    BeforeAll {
+        $script:appList = @(
+            [PSCustomObject]@{ id = 'app-001'; displayName = 'VLC media player'; displayVersion = '3.0.20'; notes = "WinGet-PackageId: VideoLAN.VLC`nManaged by: WinGet-Automater" }
+            [PSCustomObject]@{ id = 'app-002'; displayName = '7-Zip 24.08';       displayVersion = '24.8.0'; notes = "WinGet-PackageId: 7zip.7zip`nManaged by: WinGet-Automater" }
+            [PSCustomObject]@{ id = 'app-003'; displayName = 'Firefox';            displayVersion = '126.0';  notes = $null }
+            [PSCustomObject]@{ id = 'app-004'; displayName = 'Adobe Acrobat';      displayVersion = '24.1.0'; notes = 'WinGet-PackageId: Adobe.Acrobat.Reader' }
+        )
+    }
+
+    It 'Finds an app by exact PackageId match in notes' {
+        $result = Find-IntuneAppByPackageId -Apps $script:appList -PackageId 'VideoLAN.VLC'
+        $result.id | Should -Be 'app-001'
+    }
+
+    It 'Finds a second distinct app by its PackageId' {
+        $result = Find-IntuneAppByPackageId -Apps $script:appList -PackageId '7zip.7zip'
+        $result.id | Should -Be 'app-002'
+    }
+
+    It 'Returns null for an unknown PackageId' {
+        $result = Find-IntuneAppByPackageId -Apps $script:appList -PackageId 'Does.NotExist'
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'Returns null for an app with null notes' {
+        $result = Find-IntuneAppByPackageId -Apps $script:appList -PackageId 'Mozilla.Firefox'
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'Returns the correct displayVersion for matched app' {
+        $result = Find-IntuneAppByPackageId -Apps $script:appList -PackageId 'Adobe.Acrobat.Reader'
+        $result.displayVersion | Should -Be '24.1.0'
+    }
+
+    It 'Does not return a partial match (VideoLAN should not match VideoLAN.VLCx)' {
+        $extendedList = $script:appList + [PSCustomObject]@{
+            id = 'app-005'; displayName = 'VLC Extended'; displayVersion = '4.0.0'
+            notes = 'WinGet-PackageId: VideoLAN.VLCx'
+        }
+        $result = Find-IntuneAppByPackageId -Apps $extendedList -PackageId 'VideoLAN.VLC'
+        $result.id | Should -Be 'app-001'
+    }
+}
+
 # ─── Add-IntuneAppGroupAssignment ─────────────────────────────────────────────
 
 Describe 'Add-IntuneAppGroupAssignment' {

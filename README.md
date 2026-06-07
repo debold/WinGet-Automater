@@ -53,6 +53,7 @@ Microsoft Graph API      Win32 App in Intune anlegen, Datei hochladen,
 - [Konfigurationsreferenz](#konfigurationsreferenz)
 - [Ausgabestruktur](#ausgabestruktur)
 - [Versionspolitik](#versionspolitik)
+- [Intune App Matching (notes-Feld)](#intune-app-matching-notes-feld)
 - [Tests](#tests)
 
 ---
@@ -555,6 +556,23 @@ output/
 | Identische Version bereits vorhanden | Überspringen | Neue Content Version hochladen |
 | Ältere Version vorhanden | Vorhandene App aktualisieren | Neue Content Version hochladen |
 | Neuere Version bereits vorhanden | Überspringen mit Hinweis | Überspringen mit Hinweis |
+
+---
+
+## Intune App Matching (notes-Feld)
+
+Damit WinGet-Automater eine in Intune bereits vorhandene App exakt wiedererkennt – auch wenn der angezeigte Name geändert wurde oder mehrere Apps mit ähnlichen Namen existieren – wird bei jedem Upload das Feld **Notes** der App mit dem WinGet-PackageId befüllt:
+
+```
+WinGet-PackageId: VideoLAN.VLC
+Managed by: WinGet-Automater
+```
+
+Beim nächsten Lauf (normaler Upload oder `-Sync`) werden **alle** Win32 LOB Apps einmalig aus Intune geladen und client-seitig nach diesem Eintrag gefiltert. Vorteile:
+
+- **Kein Namens-Matching**: Der angezeigte App-Name in Intune kann frei umbenannt werden.
+- **Kein falsches Matching**: `VideoLAN.VLC` matcht nicht auf `VideoLAN.VLCx` (exakte ID-Prüfung).
+- **Effizient**: Nur ein API-Aufruf für alle Pakete pro Lauf, unabhängig von der Anzahl der Pakete in der Batch-Liste.
 
 ---
 

@@ -66,6 +66,60 @@ function Find-ExistingIntuneApp {
     return $response.value
 }
 
+function Get-AllIntuneWin32Apps {
+    <#
+    .SYNOPSIS
+        Fetches all Win32 LOB apps from Intune in a single paginated call.
+        Result includes the notes field so callers can match by WinGet-PackageId.
+    .OUTPUTS
+        Array of app objects with id, displayName, displayVersion, notes.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$Token
+    )
+
+    $apps = [System.Collections.Generic.List[object]]::new()
+    $url  = "$script:GraphBaseUrl/deviceAppManagement/mobileApps" +
+            "?`$filter=isof('microsoft.graph.win32LobApp')" +
+            "&`$select=id,displayName,displayVersion,notes,createdDateTime" +
+            "&`$top=999"
+
+    do {
+        $resp = Invoke-RestMethod -Uri $url -Headers (Get-GraphHeaders $Token)
+        $apps.AddRange([object[]]$resp.value)
+        $url = $resp.'@odata.nextLink'
+    } while ($url)
+
+    Write-Verbose "Loaded $($apps.Count) Win32 apps from Intune."
+    return $apps.ToArray()
+}
+
+function Find-IntuneAppByPackageId {
+    <#
+    .SYNOPSIS
+        Finds a Win32 app in a pre-loaded app list by its WinGet-PackageId stored in the notes field.
+        Use Get-AllIntuneWin32Apps once per run, then pass the result here for each package.
+    .OUTPUTS
+        Matching app object, or $null.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [object[]]$Apps,
+        [Parameter(Mandatory)] [string]$PackageId
+    )
+
+    $pattern = "WinGet-PackageId:\s*$([regex]::Escape($PackageId))(?=[\r\n\s]|$)"
+    $match   = $Apps | Where-Object { $_.notes -match $pattern }
+
+    if (@($match).Count -gt 1) {
+        Write-Warning "Multiple Intune apps found with WinGet-PackageId '$PackageId'. Using the most recently created one."
+        $match = @($match) | Sort-Object createdDateTime -Descending | Select-Object -First 1
+    }
+
+    return $match | Select-Object -First 1
+}
+
 function Compare-AppVersion {
     <#
     .SYNOPSIS
@@ -108,6 +162,7 @@ function script:New-Win32LobAppBody {
         displayVersion          = $PackageInfo.Version
         description             = $PackageInfo.Description ?? "$($PackageInfo.Name) – deployed via WinGet-Automater"
         publisher               = $PackageInfo.Publisher ?? $DefaultPublisher
+        notes                   = "WinGet-PackageId: $($PackageInfo.PackageId)`nManaged by: WinGet-Automater"
         informationUrl          = $PackageInfo.InformationUrl
         privacyInformationUrl   = $PackageInfo.PrivacyUrl
         fileName                = $IntuneWinFileName
@@ -435,5 +490,6 @@ function Add-IntuneAppGroupAssignment {
     Write-Host "Assigned app '$AppId' to group '$GroupId' (intent: $Intent)" -ForegroundColor Green
 }
 
-Export-ModuleMember -Function Get-GraphToken, Find-ExistingIntuneApp, Compare-AppVersion, `
+Export-ModuleMember -Function Get-GraphToken, Find-ExistingIntuneApp, `
+    Get-AllIntuneWin32Apps, Find-IntuneAppByPackageId, Compare-AppVersion, `
     Get-Win32DetectionRule, Publish-IntuneWin32App, Add-IntuneAppGroupAssignment
