@@ -382,14 +382,10 @@ function Invoke-IntuneWinPackaging {
     Get-ChildItem $OutputPath -Filter '*.intunewin' | Remove-Item -Force
 
     Write-Verbose "Packaging with IntuneWinAppUtil..."
-    $proc = Start-Process -FilePath $ToolPath `
-        -ArgumentList "-c `"$PackagePath`" -s `"Deploy-Application.ps1`" -o `"$OutputPath`" -q" `
-        -Wait -PassThru -NoNewWindow `
-        -RedirectStandardOutput 'NUL' `
-        -RedirectStandardError  'NUL'
+    $null = & $ToolPath -c $PackagePath -s 'Deploy-Application.ps1' -o $OutputPath -q 2>&1
 
-    if ($proc.ExitCode -ne 0) {
-        throw "IntuneWinAppUtil.exe exited with code $($proc.ExitCode)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "IntuneWinAppUtil.exe exited with code $LASTEXITCODE"
     }
 
     $result = Get-ChildItem $OutputPath -Filter '*.intunewin' | Select-Object -First 1
