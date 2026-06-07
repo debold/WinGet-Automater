@@ -332,29 +332,29 @@ function Get-PSADTInstallBlocks {
     switch -Regex ($type) {
         '^msi$' {
             $msiArgs   = if ($silentArgs) { $silentArgs } else { 'ALLUSERS=1 REBOOT=ReallySuppress' }
-            $install   = "Invoke-ADTMsiexec -Action Install -FilePath `"`$dirFiles\$InstallerFileName`" -ArgumentList '$msiArgs'"
+            $install   = "Invoke-ADTMsiexec -Action Install -FilePath '$InstallerFileName' -ArgumentList '$msiArgs'"
             $uninstall = if ($productCode) {
                 "Invoke-ADTMsiexec -Action Uninstall -ProductCode '$productCode'"
             } else {
-                "Invoke-ADTMsiexec -Action Uninstall -FilePath `"`$dirFiles\$InstallerFileName`""
+                "Invoke-ADTMsiexec -Action Uninstall -FilePath '$InstallerFileName'"
             }
-            $repair    = "Invoke-ADTMsiexec -Action Repair -FilePath `"`$dirFiles\$InstallerFileName`" -ArgumentList '$msiArgs'"
+            $repair    = "Invoke-ADTMsiexec -Action Repair -FilePath '$InstallerFileName' -ArgumentList '$msiArgs'"
         }
         '^(msix|appx|msixbundle|appxbundle)$' {
-            $install   = "Add-AppxPackage -Path `"`$dirFiles\$InstallerFileName`" -ErrorAction Stop"
+            $install   = "Add-AppxPackage -Path `"`$(`$adtSession.DirFiles)\$InstallerFileName`" -ErrorAction Stop"
             $safeName  = $PackageInfo.Name -replace '[^a-zA-Z0-9.*]', ''
             $uninstall = "Get-AppxPackage -Name '*$safeName*' | Remove-AppxPackage -ErrorAction SilentlyContinue"
             $repair    = $install
         }
         default {
             $installArgs = if ($silentArgs) { $silentArgs } else { '/S' }
-            $install     = "Start-ADTProcess -FilePath `"`$dirFiles\$InstallerFileName`" -ArgumentList '$installArgs' -WaitForMsiExec"
+            $install     = "Start-ADTProcess -FilePath '$InstallerFileName' -ArgumentList '$installArgs' -WaitForMsiExec"
             $uninstall   = if ($productCode) {
                 "Start-ADTProcess -FilePath 'msiexec.exe' -ArgumentList '/x $productCode /qn /norestart'"
             } else {
                 "# TODO: Configure uninstall command for $($PackageInfo.Name)`n            # Example: Start-ADTProcess -FilePath 'C:\Program Files\...\uninstall.exe' -ArgumentList '/S'"
             }
-            $repair      = "Start-ADTProcess -FilePath `"`$dirFiles\$InstallerFileName`" -ArgumentList '$installArgs' -WaitForMsiExec"
+            $repair      = "Start-ADTProcess -FilePath '$InstallerFileName' -ArgumentList '$installArgs' -WaitForMsiExec"
         }
     }
 

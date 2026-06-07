@@ -57,7 +57,7 @@ try {
 
         'Install' {
             ## Pre-Installation
-            Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -AllowDefer -DeferTimes 3 -CheckDiskSpace
+            Show-ADTInstallationWelcome -CloseProcesses '{{CLOSE_APPS}}' -AllowDefer -DeferTimes 3 -CheckDiskSpace
             Show-ADTInstallationProgress
 
             ## Custom Pre-Install (injected from customizations\{{PACKAGE_ID}}\PreInstall.ps1)
@@ -77,7 +77,7 @@ try {
 
         'Uninstall' {
             ## Pre-Uninstallation
-            Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
+            Show-ADTInstallationWelcome -CloseProcesses '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
             Show-ADTInstallationProgress -StatusMessage "Uninstalling $appName $appVersion..."
 
             ## Custom Pre-Uninstall (injected from customizations\{{PACKAGE_ID}}\PreUninstall.ps1)
@@ -92,7 +92,7 @@ try {
 
         'Repair' {
             ## Pre-Repair
-            Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
+            Show-ADTInstallationWelcome -CloseProcesses '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
             Show-ADTInstallationProgress -StatusMessage "Repairing $appName $appVersion..."
 
             ## Custom Pre-Install block also applied for Repair
