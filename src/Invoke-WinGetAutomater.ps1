@@ -25,6 +25,11 @@
     Pause after building the PSADT package and wait for confirmation before packaging and upload.
     Opens the package folder (Explorer on Windows) so you can inspect and edit Deploy-Application.ps1.
 
+.PARAMETER CustomizationsPath
+    Path to the customizations folder. Each subdirectory named after a PackageId can contain
+    PreInstall.ps1, PostInstall.ps1, PreUninstall.ps1, PostUninstall.ps1 and package.json.
+    Defaults to "customizations" relative to the project root.
+
 .PARAMETER Force
     Re-build even if the package folder already exists (overwrites).
 
@@ -52,8 +57,9 @@ param(
     [Parameter(ParameterSetName = 'BatchMode', Mandatory)]
     [string]$AppsFile,
 
-    [string]$ConfigFile  = (Join-Path $PSScriptRoot '..\config\config.json'),
+    [string]$ConfigFile         = (Join-Path $PSScriptRoot '..\config\config.json'),
     [string]$OutputPath,
+    [string]$CustomizationsPath = (Join-Path $PSScriptRoot '..\customizations'),
     [switch]$SkipUpload,
     [switch]$Review,
     [switch]$Force
@@ -147,7 +153,8 @@ foreach ($pkg in $packages) {
             Write-Host "[2/4] Building PSADT v4 package..."
             $packageFolder = New-PSADTPackage -PackageInfo $packageInfo `
                 -OutputPath $resolvedOut -TemplatePath $templatePath `
-                -PSADTVersion ($cfg.build.psadtVersion ?? '4.0.4')
+                -PSADTVersion ($cfg.build.psadtVersion ?? '4.0.4') `
+                -CustomizationsPath $CustomizationsPath
         }
 
         # 2b – Review pause

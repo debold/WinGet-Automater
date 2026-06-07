@@ -60,8 +60,14 @@ try {
             Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -AllowDefer -DeferTimes 3 -CheckDiskSpace
             Show-ADTInstallationProgress
 
+            ## Custom Pre-Install (injected from customizations\{{PACKAGE_ID}}\PreInstall.ps1)
+            {{PRE_INSTALL_BLOCK}}
+
             ## Installation
             {{INSTALL_BLOCK}}
+
+            ## Custom Post-Install (injected from customizations\{{PACKAGE_ID}}\PostInstall.ps1)
+            {{POST_INSTALL_BLOCK}}
 
             ## Post-Installation (suppress restart prompt in silent mode)
             if ($DeployMode -ne 'Silent') {
@@ -74,8 +80,14 @@ try {
             Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
             Show-ADTInstallationProgress -StatusMessage "Uninstalling $appName $appVersion..."
 
+            ## Custom Pre-Uninstall (injected from customizations\{{PACKAGE_ID}}\PreUninstall.ps1)
+            {{PRE_UNINSTALL_BLOCK}}
+
             ## Uninstallation
             {{UNINSTALL_BLOCK}}
+
+            ## Custom Post-Uninstall (injected from customizations\{{PACKAGE_ID}}\PostUninstall.ps1)
+            {{POST_UNINSTALL_BLOCK}}
         }
 
         'Repair' {
@@ -83,8 +95,14 @@ try {
             Show-ADTInstallationWelcome -CloseApps '{{CLOSE_APPS}}' -Silent:($DeployMode -eq 'Silent')
             Show-ADTInstallationProgress -StatusMessage "Repairing $appName $appVersion..."
 
+            ## Custom Pre-Install block also applied for Repair
+            {{PRE_INSTALL_BLOCK}}
+
             ## Repair
             {{REPAIR_BLOCK}}
+
+            ## Custom Post-Install block also applied for Repair
+            {{POST_INSTALL_BLOCK}}
         }
     }
 }

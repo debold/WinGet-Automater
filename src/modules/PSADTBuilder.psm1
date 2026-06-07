@@ -62,6 +62,56 @@ function Get-PSADTFramework {
     return $psadtPath
 }
 
+function Get-PackageCustomization {
+    <#
+    .SYNOPSIS
+        Loads per-package customization snippets and overrides from the customizations folder.
+    .PARAMETER PackageId
+        WinGet package identifier, e.g. Adobe.Acrobat.Reader.
+    .PARAMETER CustomizationsPath
+        Root folder that contains per-package subdirectories.
+    .OUTPUTS
+        Hashtable with keys: PreInstall, PostInstall, PreUninstall, PostUninstall, Overrides.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)] [string]$PackageId,
+        [Parameter(Mandatory)] [string]$CustomizationsPath
+    )
+
+    $result = @{
+        PreInstall    = ''
+        PostInstall   = ''
+        PreUninstall  = ''
+        PostUninstall = ''
+        Overrides     = $null
+    }
+
+    $pkgDir = Join-Path $CustomizationsPath $PackageId
+    if (-not (Test-Path $pkgDir)) {
+        Write-Verbose "No customizations found for $PackageId"
+        return $result
+    }
+
+    Write-Host "Loading customizations from: $pkgDir" -ForegroundColor Cyan
+    foreach ($hook in @('PreInstall', 'PostInstall', 'PreUninstall', 'PostUninstall')) {
+        $file = Join-Path $pkgDir "$hook.ps1"
+        if (Test-Path $file) {
+            $result[$hook] = Get-Content $file -Raw
+            Write-Verbose "  Loaded: $hook.ps1"
+        }
+    }
+
+    $configFile = Join-Path $pkgDir 'package.json'
+    if (Test-Path $configFile) {
+        $result.Overrides = Get-Content $configFile -Raw | ConvertFrom-Json
+        Write-Verbose "  Loaded: package.json"
+    }
+
+    return $result
+}
+
 function New-PSADTPackage {
     <#
     .SYNOPSIS
@@ -76,6 +126,9 @@ function New-PSADTPackage {
         PSADT v4 version to download/use. Must match a GitHub release tag.
     .PARAMETER PSADTCachePath
         Where to cache the PSADT download. Defaults to %TEMP%\PSADT-Cache.
+    .PARAMETER CustomizationsPath
+        Root folder with per-package customization subdirectories.
+        If a subfolder matching the PackageId exists, its snippets and overrides are applied.
     .OUTPUTS
         Full path to the built package folder.
     #>
@@ -91,8 +144,9 @@ function New-PSADTPackage {
         [Parameter(Mandatory)]
         [string]$TemplatePath,
 
-        [string]$PSADTVersion   = '4.0.4',
-        [string]$PSADTCachePath = (Join-Path $env:TEMP 'PSADT-Cache')
+        [string]$PSADTVersion        = '4.0.4',
+        [string]$PSADTCachePath      = (Join-Path $env:TEMP 'PSADT-Cache'),
+        [string]$CustomizationsPath  = ''
     )
 
     $packageFolder = Join-Path $OutputPath $PackageInfo.PackageId $PackageInfo.Version
@@ -123,21 +177,45 @@ function New-PSADTPackage {
         Write-Verbose "SHA256 verified: $hash"
     }
 
+    # Load per-package customizations
+    $customization = if ($CustomizationsPath -and (Test-Path $CustomizationsPath)) {
+        Get-PackageCustomization -PackageId $PackageInfo.PackageId -CustomizationsPath $CustomizationsPath
+    } else {
+        @{ PreInstall = ''; PostInstall = ''; PreUninstall = ''; PostUninstall = ''; Overrides = $null }
+    }
+
+    # Apply overrides from package.json (closeApps, installSwitches)
+    if ($customization.Overrides) {
+        if ($customization.Overrides.PSObject.Properties['installSwitches']) {
+            $PackageInfo.InstallerSwitches = $customization.Overrides.installSwitches
+            Write-Verbose "Override: installSwitches = $($customization.Overrides.installSwitches)"
+        }
+    }
+
     # Generate Deploy-Application.ps1
     $installBlock, $uninstallBlock, $repairBlock = Get-PSADTInstallBlocks -PackageInfo $PackageInfo -InstallerFileName $installerFileName
-    $closeApps = ($PackageInfo.Name -replace '[^a-zA-Z0-9_]', '').ToLower()
+
+    $closeApps = if ($customization.Overrides?.closeApps) {
+        $customization.Overrides.closeApps
+    } else {
+        ($PackageInfo.Name -replace '[^a-zA-Z0-9_]', '').ToLower()
+    }
 
     $script = Get-Content $TemplatePath -Raw
-    $script = $script -replace '{{PACKAGE_ID}}',   $PackageInfo.PackageId
-    $script = $script -replace '{{PUBLISHER}}',    ($PackageInfo.Publisher  -replace "'", "''")
-    $script = $script -replace '{{APP_NAME}}',     ($PackageInfo.Name       -replace "'", "''")
-    $script = $script -replace '{{VERSION}}',      $PackageInfo.Version
-    $script = $script -replace '{{ARCHITECTURE}}', $PackageInfo.Architecture
-    $script = $script -replace '{{SETUP_FILE}}',   $installerFileName
-    $script = $script -replace '{{CLOSE_APPS}}',   $closeApps
-    $script = $script -replace '{{INSTALL_BLOCK}}',   $installBlock
-    $script = $script -replace '{{UNINSTALL_BLOCK}}', $uninstallBlock
-    $script = $script -replace '{{REPAIR_BLOCK}}',    $repairBlock
+    $script = $script -replace '{{PACKAGE_ID}}',        $PackageInfo.PackageId
+    $script = $script -replace '{{PUBLISHER}}',         ($PackageInfo.Publisher  -replace "'", "''")
+    $script = $script -replace '{{APP_NAME}}',          ($PackageInfo.Name       -replace "'", "''")
+    $script = $script -replace '{{VERSION}}',           $PackageInfo.Version
+    $script = $script -replace '{{ARCHITECTURE}}',      $PackageInfo.Architecture
+    $script = $script -replace '{{SETUP_FILE}}',        $installerFileName
+    $script = $script -replace '{{CLOSE_APPS}}',        $closeApps
+    $script = $script -replace '{{INSTALL_BLOCK}}',     $installBlock
+    $script = $script -replace '{{UNINSTALL_BLOCK}}',   $uninstallBlock
+    $script = $script -replace '{{REPAIR_BLOCK}}',      $repairBlock
+    $script = $script -replace '{{PRE_INSTALL_BLOCK}}',    $customization.PreInstall
+    $script = $script -replace '{{POST_INSTALL_BLOCK}}',   $customization.PostInstall
+    $script = $script -replace '{{PRE_UNINSTALL_BLOCK}}',  $customization.PreUninstall
+    $script = $script -replace '{{POST_UNINSTALL_BLOCK}}', $customization.PostUninstall
 
     Set-Content -Path (Join-Path $packageFolder 'Deploy-Application.ps1') -Value $script -Encoding UTF8
 
@@ -236,4 +314,4 @@ function Invoke-IntuneWinPackaging {
     return $result.FullName
 }
 
-Export-ModuleMember -Function Get-PSADTFramework, New-PSADTPackage, Invoke-IntuneWinPackaging
+Export-ModuleMember -Function Get-PSADTFramework, New-PSADTPackage, Invoke-IntuneWinPackaging, Get-PackageCustomization

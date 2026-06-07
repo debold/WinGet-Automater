@@ -44,6 +44,7 @@ Microsoft Graph API      Win32 App in Intune anlegen, Datei hochladen,
   - [Nur bauen, nicht hochladen](#nur-bauen-nicht-hochladen)
   - [Batch-Modus](#batch-modus)
   - [Paket neu bauen (Force)](#paket-neu-bauen-force)
+- [Paketspezifische Customizations](#paketspezifische-customizations)
 - [Deploy-Application.ps1 anpassen](#deploy-applicationps1-anpassen)
   - [Wann anpassen?](#wann-anpassen)
   - [Aufbau des generierten Skripts](#aufbau-des-generierten-skripts)
@@ -243,6 +244,111 @@ Wenn der Paketordner bereits existiert, wird der Build-Schritt standardmäßig �
 
 ```powershell
 .\src\Invoke-WinGetAutomater.ps1 -PackageId "VideoLAN.VLC" -Force
+```
+
+---
+
+## Paketspezifische Customizations
+
+Customizations lösen das Problem, dass bestimmte Pakete bei jeder Version die gleichen Anpassungen benötigen — z.B. einen Desktop-Link entfernen, Registry-Keys setzen oder einen Dienst deaktivieren. Statt `Deploy-Application.ps1` nach jedem Update manuell zu bearbeiten, legt man die Anpassungen einmalig in `customizations/<PackageId>/` ab. Sie werden bei jedem Build automatisch injiziert.
+
+### Verzeichnisstruktur
+
+```
+customizations/
+└── Adobe.Acrobat.Reader/         ← Ordnername = WinGet PackageId
+    ├── package.json              ← Overrides für closeApps und installSwitches
+    ├── PreInstall.ps1            ← Läuft vor dem Installer
+    ├── PostInstall.ps1           ← Läuft nach dem Installer
+    ├── PreUninstall.ps1          ← Läuft vor der Deinstallation
+    └── PostUninstall.ps1         ← Läuft nach der Deinstallation
+```
+
+Alle Dateien sind optional. Nur vorhandene Dateien werden eingebunden. Ein Paket ohne Customization-Verzeichnis wird unverändert gebaut.
+
+### package.json – Overrides
+
+```json
+{
+  "closeApps": "AcroRd32,Acrobat",
+  "installSwitches": "/sAll /rs /msi /norestart EULA_ACCEPT=YES"
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `closeApps` | Kommagetrennte Prozessnamen die PSADT vor der Installation schließt. Überschreibt den automatisch aus dem App-Namen abgeleiteten Wert. |
+| `installSwitches` | Überschreibt die aus dem WinGet-Manifest gelesenen Silent-Switches. |
+
+### PowerShell-Snippets
+
+Die `.ps1`-Dateien enthalten normalen PowerShell-Code, der direkt in `Deploy-Application.ps1` eingefügt wird. PSADT-Funktionen wie `Write-ADTLogEntry` stehen zur Verfügung.
+
+**Beispiel PostInstall.ps1 – Desktop-Link entfernen, Dienst deaktivieren:**
+
+```powershell
+# Desktop-Verknüpfung vom Public Desktop entfernen
+$link = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Adobe Acrobat.lnk'
+if (Test-Path $link) {
+    Remove-Item $link -Force
+    Write-ADTLogEntry -Message 'Public Desktop shortcut removed.'
+}
+
+# Adobe Updater-Dienst deaktivieren
+$svc = Get-Service -Name 'AdobeARMservice' -ErrorAction SilentlyContinue
+if ($svc) {
+    Stop-Service $svc.Name -Force -ErrorAction SilentlyContinue
+    Set-Service  $svc.Name -StartupType Disabled
+    Write-ADTLogEntry -Message 'AdobeARMservice disabled.'
+}
+```
+
+**Beispiel PreInstall.ps1 – Registry-Keys vor der Installation setzen:**
+
+```powershell
+$regPath = 'HKLM:\SOFTWARE\Policies\Adobe\Acrobat Reader\DC\FeatureLockDown'
+if (-not (Test-Path $regPath)) { New-Item $regPath -Force | Out-Null }
+Set-ItemProperty -Path $regPath -Name 'bUpdater'          -Value 0 -Type DWord -Force
+Set-ItemProperty -Path $regPath -Name 'bUsageMeasurement' -Value 0 -Type DWord -Force
+Write-ADTLogEntry -Message 'Adobe Reader policy keys set.'
+```
+
+**Beispiel PostUninstall.ps1 – Registry-Reste bereinigen:**
+
+```powershell
+$paths = @(
+    'HKLM:\SOFTWARE\Adobe\Acrobat Reader'
+    'HKLM:\SOFTWARE\Policies\Adobe\Acrobat Reader'
+    'HKCU:\SOFTWARE\Adobe\Acrobat Reader'
+)
+foreach ($p in $paths) {
+    if (Test-Path $p) {
+        Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue
+        Write-ADTLogEntry -Message "Removed registry path: $p"
+    }
+}
+```
+
+### Einfügestellen im generierten Skript
+
+```
+Install:
+  Welcome → Pre-Install → [Installer] → Post-Install → Restart-Prompt
+
+Uninstall:
+  Welcome → Pre-Uninstall → [Uninstaller] → Post-Uninstall
+
+Repair:
+  Welcome → Pre-Install → [Repair] → Post-Install
+```
+
+### Customizations-Pfad anpassen
+
+Standard ist `./customizations` relativ zum Projektordner. Kann per Parameter überschrieben werden:
+
+```powershell
+.\src\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" `
+    -CustomizationsPath "C:\IT\IntuneCustomizations"
 ```
 
 ---

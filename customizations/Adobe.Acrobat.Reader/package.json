@@ -1,0 +1,4 @@
+{
+  "closeApps": "AcroRd32,Acrobat",
+  "installSwitches": "/sAll /rs /msi /norestart EULA_ACCEPT=YES"
+}

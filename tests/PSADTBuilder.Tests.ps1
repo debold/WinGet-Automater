@@ -303,3 +303,118 @@ Describe 'New-PSADTPackage – SHA256 mismatch is rejected' {
         } | Should -Throw '*SHA256 mismatch*'
     }
 }
+
+# ─── Get-PackageCustomization ─────────────────────────────────────────────────
+
+Describe 'Get-PackageCustomization' {
+    BeforeAll {
+        $script:CustomizationsRoot = Join-Path $env:TEMP "Customizations_$(New-Guid)"
+        $script:PkgDir = Join-Path $script:CustomizationsRoot 'Test.Package'
+        New-Item -ItemType Directory -Path $script:PkgDir -Force | Out-Null
+
+        Set-Content (Join-Path $script:PkgDir 'PreInstall.ps1')    'Write-Host "pre-install"'  -Encoding UTF8
+        Set-Content (Join-Path $script:PkgDir 'PostInstall.ps1')   'Write-Host "post-install"' -Encoding UTF8
+        Set-Content (Join-Path $script:PkgDir 'PostUninstall.ps1') 'Write-Host "post-uninstall"' -Encoding UTF8
+        Set-Content (Join-Path $script:PkgDir 'package.json') '{"closeApps":"myapp","installSwitches":"/S /CUSTOM"}' -Encoding UTF8
+    }
+
+    AfterAll {
+        Remove-Item $script:CustomizationsRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'Loads PreInstall snippet' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.PreInstall | Should -Match 'pre-install'
+    }
+    It 'Loads PostInstall snippet' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.PostInstall | Should -Match 'post-install'
+    }
+    It 'Returns empty string for missing hook (PreUninstall not created)' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.PreUninstall | Should -BeNullOrEmpty
+    }
+    It 'Loads PostUninstall snippet' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.PostUninstall | Should -Match 'post-uninstall'
+    }
+    It 'Parses closeApps from package.json' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.Overrides.closeApps | Should -Be 'myapp'
+    }
+    It 'Parses installSwitches from package.json' {
+        $c = Get-PackageCustomization -PackageId 'Test.Package' -CustomizationsPath $script:CustomizationsRoot
+        $c.Overrides.installSwitches | Should -Be '/S /CUSTOM'
+    }
+    It 'Returns empty result for unknown PackageId' {
+        $c = Get-PackageCustomization -PackageId 'Does.Not.Exist' -CustomizationsPath $script:CustomizationsRoot
+        $c.PreInstall    | Should -BeNullOrEmpty
+        $c.PostInstall   | Should -BeNullOrEmpty
+        $c.Overrides     | Should -BeNullOrEmpty
+    }
+}
+
+# ─── New-PSADTPackage – customization injection ───────────────────────────────
+
+Describe 'New-PSADTPackage – customization snippets are injected' {
+    BeforeAll {
+        $script:TempOut3  = Join-Path $env:TEMP "PSADTTest_$(New-Guid)"
+        $script:CustomDir = Join-Path $env:TEMP "Customizations_$(New-Guid)"
+        $pkgCustomDir     = Join-Path $script:CustomDir 'Test.Package'
+        New-Item -ItemType Directory -Path $pkgCustomDir -Force | Out-Null
+
+        Set-Content (Join-Path $pkgCustomDir 'PostInstall.ps1') 'Remove-Item "C:\Public\Desktop\App.lnk" -Force' -Encoding UTF8
+        Set-Content (Join-Path $pkgCustomDir 'package.json')    '{"closeApps":"testapp"}' -Encoding UTF8
+
+        $script:PackageInfo3 = [ordered]@{
+            PackageId         = 'Test.Package'
+            Version           = '9.9.9'
+            Name              = 'Custom Test App'
+            Publisher         = 'Pub'
+            Description       = $null
+            License           = $null
+            InformationUrl    = $null
+            PrivacyUrl        = $null
+            InstallerUrl      = 'https://example.com/setup.exe'
+            InstallerSha256   = 'A' * 64
+            InstallerType     = 'exe'
+            InstallerSwitches = '/S'
+            ProductCode       = $null
+            Architecture      = 'x64'
+        }
+
+        Mock -ModuleName PSADTBuilder Invoke-WebRequest {
+            $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
+            [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
+        } -ParameterFilter { $Uri -like 'https://example.com/*' }
+
+        Mock -ModuleName PSADTBuilder Get-FileHash {
+            return [PSCustomObject]@{ Hash = 'A' * 64 }
+        }
+
+        $script:Result3 = New-PSADTPackage `
+            -PackageInfo        $script:PackageInfo3 `
+            -OutputPath         $script:TempOut3 `
+            -TemplatePath       $script:TemplatePath `
+            -PSADTVersion       '4.0.4' `
+            -CustomizationsPath $script:CustomDir
+    }
+
+    AfterAll {
+        Remove-Item $script:TempOut3  -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $script:CustomDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'PostInstall snippet is injected into Deploy-Application.ps1' {
+        $content = Get-Content (Join-Path $script:Result3 'Deploy-Application.ps1') -Raw
+        $content | Should -Match 'Remove-Item.*Desktop.*App\.lnk'
+    }
+    It 'closeApps override from package.json is applied' {
+        $content = Get-Content (Join-Path $script:Result3 'Deploy-Application.ps1') -Raw
+        $content | Should -Match 'testapp'
+    }
+    It 'No unresolved placeholders remain in the generated script' {
+        $content = Get-Content (Join-Path $script:Result3 'Deploy-Application.ps1') -Raw
+        $content | Should -Not -Match '\{\{[A-Z_]+\}\}'
+    }
+}
