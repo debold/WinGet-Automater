@@ -1,0 +1,30 @@
+{
+  "_comment": "Copy this file to config.json and fill in your values. config.json is gitignored.",
+
+  "auth": {
+    "_comment": "Azure App Registration with DeviceManagementApps.ReadWrite.All permission",
+    "tenantId":     "<your-tenant-id>",
+    "clientId":     "<your-app-registration-client-id>",
+    "clientSecret": "<your-client-secret>"
+  },
+
+  "intune": {
+    "_comment": "assignmentGroupId: leave empty to skip automatic group assignment",
+    "defaultPublisher":  "WinGet-Automater",
+    "assignmentGroupId": "",
+    "assignmentIntent":  "available"
+  },
+
+  "build": {
+    "_comment": "psadtVersion must match a tag on https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases",
+    "outputPath":        "output",
+    "psadtVersion":      "4.0.4",
+    "intuneWinToolPath": "tools\\IntuneWinAppUtil.exe",
+    "keepBuildArtifacts": true
+  },
+
+  "github": {
+    "_comment": "Optional: Personal Access Token to avoid API rate limiting (60 req/h unauthenticated)",
+    "token": ""
+  }
+}

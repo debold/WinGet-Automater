@@ -1,0 +1,21 @@
+{
+  "_comment": "Batch mode package list. Pass this file via -AppsFile parameter.",
+  "packages": [
+    {
+      "PackageId": "VideoLAN.VLC",
+      "Version":   null
+    },
+    {
+      "PackageId": "Mozilla.Firefox",
+      "Version":   null
+    },
+    {
+      "PackageId": "Microsoft.VisualStudioCode",
+      "Version":   null
+    },
+    {
+      "PackageId": "Notepad++.Notepad++",
+      "Version":   "8.6.7"
+    }
+  ]
+}

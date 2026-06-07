@@ -1,0 +1,20 @@
+# Secrets – never commit
+config/config.json
+
+# Build output
+output/
+
+# PSADT download cache (large files)
+# Keep if you want to avoid re-downloading
+# TEMP/PSADT-Cache/
+
+# IntuneWinAppUtil binary
+tools/IntuneWinAppUtil.exe
+
+# PowerShell temp files
+*.ps1xml~
+*-tmp.ps1
+
+# Windows artifacts
+Thumbs.db
+Desktop.ini
