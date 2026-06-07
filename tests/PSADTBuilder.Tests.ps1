@@ -3,7 +3,8 @@
 
 <#
   Unit tests for PSADTBuilder.psm1.
-  All external calls (PSADT download, installer download, SHA256) are mocked.
+  PSADT v4 framework is downloaded from GitHub on first run and cached in %TEMP%\PSADT-Cache.
+  The installer download is mocked (no real app binaries fetched).
   The template file at templates/Deploy-Application.ps1.template is read from disk.
 #>
 
@@ -15,20 +16,6 @@ BeforeDiscovery {
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
     $script:TemplatePath = Join-Path $PSScriptRoot '../templates/Deploy-Application.ps1.template'
-
-    # Fake PSADT framework folder reused by all New-PSADTPackage tests.
-    # Get-PSADTFramework is mocked per-Describe to return this path, so no network call is made.
-    $script:FakePSADTPath = Join-Path $TestDrive 'FakePSADT'
-    $adtDir = Join-Path $script:FakePSADTPath 'AppDeployToolkit'
-    New-Item -ItemType Directory -Path $adtDir -Force | Out-Null
-    Set-Content -Path (Join-Path $adtDir 'AppDeployToolkitConfig.xml') -Encoding UTF8 -Value @'
-<?xml version="1.0" encoding="utf-8"?>
-<AppDeployToolkit_Config>
-  <Toolkit_Options>
-    <Toolkit_CompanyName>PS App Deploy Toolkit</Toolkit_CompanyName>
-  </Toolkit_Options>
-</AppDeployToolkit_Config>
-'@
 }
 
 # ─── Get-PSADTInstallBlocks ───────────────────────────────────────────────────
@@ -216,7 +203,6 @@ Describe 'New-PSADTPackage – template substitution and folder structure' {
             Architecture      = 'x64'
         }
 
-        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
 
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
@@ -298,7 +284,6 @@ Describe 'New-PSADTPackage – SHA256 mismatch is rejected' {
             Architecture      = 'x64'
         }
 
-        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
 
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
@@ -402,7 +387,6 @@ Describe 'New-PSADTPackage – customization snippets are injected' {
             Architecture      = 'x64'
         }
 
-        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
 
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
@@ -461,7 +445,6 @@ Describe 'New-PSADTPackage – extra files are injected from customizations\File
             InstallerType = 'exe'; InstallerSwitches = '/S'; ProductCode = $null; Architecture = 'x64'
         }
 
-        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
 
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
