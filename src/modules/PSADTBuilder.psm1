@@ -27,13 +27,28 @@ function Get-PSADTFramework {
     New-Item -ItemType Directory -Path $psadtPath -Force | Out-Null
 
     $zipPath = "$psadtPath.zip"
-    $zipUrl  = "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_$Version.zip"
 
-    try {
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
-    } catch {
+    # PSADT releases use either bare version tags (4.x.x) or v-prefixed tags (v4.x.x).
+    # Try both so the code works regardless of which convention the release uses.
+    $candidateUrls = @(
+        "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_$Version.zip"
+        "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/v$Version/PSAppDeployToolkit_$Version.zip"
+    )
+
+    $downloaded = $false
+    foreach ($zipUrl in $candidateUrls) {
+        try {
+            Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+            $downloaded = $true
+            break
+        } catch {
+            Write-Verbose "URL not reachable: $zipUrl"
+        }
+    }
+
+    if (-not $downloaded) {
         Remove-Item $psadtPath -Recurse -Force -ErrorAction SilentlyContinue
-        throw "Failed to download PSADT v$Version from $zipUrl.`nError: $_`nPlease download manually from https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases"
+        throw "Failed to download PSADT v$Version.`nTried:`n  $($candidateUrls -join "`n  ")`nCheck available releases at https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases`nand set the correct version in config.json (build.psadtVersion)."
     }
 
     $extractPath = "$psadtPath-extract"
