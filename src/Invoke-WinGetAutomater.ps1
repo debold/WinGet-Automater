@@ -208,7 +208,7 @@ foreach ($pkg in $packages) {
             Write-Host "[0/4] Checking latest WinGet version..."
             $latestVersion  = Get-WinGetLatestVersion -PackageId $pkgId -GitHubToken $ghToken
             $existingInSync = Find-IntuneAppByPackageId -Apps $allIntuneApps -PackageId $pkgId
-            $intuneVersion  = if ($existingInSync) { $existingInSync.displayVersion ?? '0.0' } else { '0.0' }
+            $intuneVersion  = if ($existingInSync) { Get-IntuneAppVersion $existingInSync } else { '0.0' }
 
             $cmpSync = Compare-AppVersion -NewVersion $latestVersion -ExistingVersion $intuneVersion
 
@@ -311,10 +311,11 @@ foreach ($pkg in $packages) {
 
         if ($existingApp) {
             $latest = $existingApp
-            $cmp    = Compare-AppVersion -NewVersion $packageInfo.Version -ExistingVersion ($latest.displayVersion ?? '0.0')
+            $intuneVer = Get-IntuneAppVersion $latest
+            $cmp    = Compare-AppVersion -NewVersion $packageInfo.Version -ExistingVersion $intuneVer
 
             if ($Redeploy) {
-                Write-Host "Redeploy: pushing new content for version $($packageInfo.Version) (existing: $($latest.displayVersion))." -ForegroundColor Cyan
+                Write-Host "Redeploy: pushing new content for version $($packageInfo.Version) (existing: $intuneVer)." -ForegroundColor Cyan
                 $existingAppId = $latest.id
             }
             elseif ($cmp -eq 0) {
@@ -326,7 +327,7 @@ foreach ($pkg in $packages) {
                 continue
             }
             elseif ($cmp -lt 0) {
-                Write-Host "Newer version already in Intune ($($latest.displayVersion)). Skipping." -ForegroundColor Yellow
+                Write-Host "Newer version already in Intune ($intuneVer). Skipping." -ForegroundColor Yellow
                 $results.Add([PSCustomObject]@{
                     PackageId = $pkgId; Version = $packageInfo.Version
                     Status = 'NewerExists'; AppId = $latest.id
@@ -334,7 +335,7 @@ foreach ($pkg in $packages) {
                 continue
             }
             else {
-                Write-Host "Updating $($latest.displayVersion) → $($packageInfo.Version)"
+                Write-Host "Updating $intuneVer → $($packageInfo.Version)"
                 $existingAppId = $latest.id
             }
         }

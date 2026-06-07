@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 
-$script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
+$script:GraphBaseUrl = 'https://graph.microsoft.com/beta'
 
 # --- Authentication ---
 
@@ -59,8 +59,8 @@ function Find-ExistingIntuneApp {
 
     $encoded = [uri]::EscapeDataString($DisplayName)
     $url = "$script:GraphBaseUrl/deviceAppManagement/mobileApps" +
-           "?`$filter=displayName eq '$encoded' and isof('microsoft.graph.win32LobApp')" +
-           "&`$select=id,displayName,displayVersion,createdDateTime"
+           "?`$filter=isof('microsoft.graph.win32LobApp') and displayName eq '$encoded'" +
+           "&`$select=id,displayName,notes,createdDateTime"
 
     $response = Invoke-RestMethod -Uri $url -Headers (Get-GraphHeaders $Token)
     return $response.value
@@ -82,7 +82,7 @@ function Get-AllIntuneWin32Apps {
     $apps = [System.Collections.Generic.List[object]]::new()
     $url  = "$script:GraphBaseUrl/deviceAppManagement/mobileApps" +
             "?`$filter=isof('microsoft.graph.win32LobApp')" +
-            "&`$select=id,displayName,displayVersion,notes,createdDateTime" +
+            "&`$select=id,displayName,notes,createdDateTime" +
             "&`$top=999"
 
     do {
@@ -118,6 +118,19 @@ function Find-IntuneAppByPackageId {
     }
 
     return $match | Select-Object -First 1
+}
+
+function Get-IntuneAppVersion {
+    <#
+    .SYNOPSIS
+        Returns the version string of an Intune app object.
+        Reads WinGet-Version from the notes field; falls back to displayVersion property.
+    #>
+    param([object]$App)
+    if ($App.notes -match 'WinGet-Version:\s*([^\r\n]+)') {
+        return $Matches[1].Trim()
+    }
+    return $App.displayVersion ?? '0.0'
 }
 
 function Compare-AppVersion {
@@ -162,7 +175,7 @@ function script:New-Win32LobAppBody {
         displayVersion          = $PackageInfo.Version
         description             = $PackageInfo.Description ?? "$($PackageInfo.Name) – deployed via WinGet-Automater"
         publisher               = $PackageInfo.Publisher ?? $DefaultPublisher
-        notes                   = "WinGet-PackageId: $($PackageInfo.PackageId)`nManaged by: WinGet-Automater"
+        notes                   = "WinGet-PackageId: $($PackageInfo.PackageId)`nWinGet-Version: $($PackageInfo.Version)`nManaged by: WinGet-Automater"
         informationUrl          = $PackageInfo.InformationUrl
         privacyInformationUrl   = $PackageInfo.PrivacyUrl
         fileName                = $IntuneWinFileName
@@ -182,6 +195,7 @@ function script:New-Win32LobAppBody {
             @{ returnCode = 1618; type = 'retry'      }
         )
         detectionRules          = @($detectionRule)
+        setupFilePath           = 'Deploy-Application.ps1'
         minimumSupportedWindowsRelease = '21H1'
         allowAvailableUninstall = $true
     }
@@ -203,7 +217,6 @@ function Get-Win32DetectionRule {
             '@odata.type'          = '#microsoft.graph.win32LobAppProductCodeDetection'
             productCode            = $PackageInfo.ProductCode
             productVersionOperator = 'notConfigured'
-            productVersion         = $null
         }
     }
 
@@ -239,7 +252,7 @@ function script:Read-IntuneWinDetectionXml {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($IntuneWinPath)
     try {
-        $entry = $zip.Entries | Where-Object { $_.FullName -eq 'Metadata/Detection.xml' } | Select-Object -First 1
+        $entry = $zip.Entries | Where-Object { $_.FullName -like '*/Metadata/Detection.xml' } | Select-Object -First 1
         if (-not $entry) { throw "Detection.xml not found inside '$IntuneWinPath'" }
         $reader  = New-Object System.IO.StreamReader($entry.Open())
         $xmlText = $reader.ReadToEnd()
@@ -258,7 +271,7 @@ function script:Expand-IntuneWinContent {
 
     $zip = [System.IO.Compression.ZipFile]::OpenRead($IntuneWinPath)
     try {
-        $contentEntry = $zip.Entries | Where-Object { $_.FullName -like 'Contents/*' -and $_.Name } | Select-Object -First 1
+        $contentEntry = $zip.Entries | Where-Object { $_.FullName -like '*/Contents/*' -and $_.Name } | Select-Object -First 1
         if (-not $contentEntry) { throw "Content entry not found inside '$IntuneWinPath'" }
         $destFile = Join-Path $ExtractPath $contentEntry.Name
         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($contentEntry, $destFile, $true)
@@ -274,26 +287,32 @@ function script:Send-AzureBlobChunked {
     param([string]$SasUrl, [string]$FilePath)
 
     $chunkSize = 4 * 1024 * 1024   # 4 MB
-    $fileBytes = [System.IO.File]::ReadAllBytes($FilePath)
-    $totalSize = $fileBytes.Length
+    $totalSize = (Get-Item $FilePath).Length
     $blockIds  = [System.Collections.Generic.List[string]]::new()
     $chunks    = [Math]::Ceiling($totalSize / $chunkSize)
 
-    Write-Verbose "Uploading $totalSize bytes in $chunks chunks..."
+    Write-Host "  Uploading $([Math]::Round($totalSize/1MB,1)) MB in $chunks chunks..."
 
-    for ($i = 0; $i -lt $chunks; $i++) {
-        $offset  = $i * $chunkSize
-        $length  = [Math]::Min($chunkSize, $totalSize - $offset)
-        $chunk   = $fileBytes[$offset..($offset + $length - 1)]
-        $blockId = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($i.ToString('D6')))
-        $blockIds.Add($blockId)
+    $fs = [System.IO.File]::OpenRead($FilePath)
+    try {
+        for ($i = 0; $i -lt $chunks; $i++) {
+            $length  = [Math]::Min($chunkSize, $totalSize - ($i * $chunkSize))
+            $chunk   = [byte[]]::new($length)
+            [void]$fs.Read($chunk, 0, $length)
 
-        $blockUrl = "${SasUrl}&comp=block&blockid=$([uri]::EscapeDataString($blockId))"
-        Invoke-WebRequest -Uri $blockUrl -Method Put -Body $chunk `
-            -Headers @{ 'x-ms-blob-type' = 'BlockBlob' } -UseBasicParsing | Out-Null
+            $blockId = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($i.ToString('D6')))
+            $blockIds.Add($blockId)
 
-        $pct = [Math]::Round(($i + 1) / $chunks * 100)
-        Write-Progress -Activity "Uploading to Azure Blob Storage" -Status "$pct%" -PercentComplete $pct
+            $blockUrl = "${SasUrl}&comp=block&blockid=$([uri]::EscapeDataString($blockId))"
+            Invoke-WebRequest -Uri $blockUrl -Method Put -Body $chunk `
+                -Headers @{ 'x-ms-blob-type' = 'BlockBlob' } `
+                -ContentType 'application/octet-stream' -UseBasicParsing | Out-Null
+
+            $pct = [Math]::Round(($i + 1) / $chunks * 100)
+            Write-Progress -Activity "Uploading to Azure Blob Storage" -Status "$pct% (chunk $($i+1)/$chunks)" -PercentComplete $pct
+        }
+    } finally {
+        $fs.Dispose()
     }
 
     # Commit block list
@@ -303,7 +322,7 @@ function script:Send-AzureBlobChunked {
         -Body $blockListXml -ContentType 'text/xml' -UseBasicParsing | Out-Null
 
     Write-Progress -Activity "Uploading to Azure Blob Storage" -Completed
-    Write-Verbose "Azure Blob upload complete."
+    Write-Host "  Azure Blob upload complete."
 }
 
 # --- Upload state polling ---
@@ -318,13 +337,13 @@ function script:Wait-IntuneFileState {
         [int]$TimeoutSeconds = 300
     )
 
-    $url      = "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$AppId/contentVersions/$VersionId/files/$FileId"
+    $url      = "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$AppId/microsoft.graph.win32LobApp/contentVersions/$VersionId/files/$FileId"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 5
         $file = Invoke-RestMethod -Uri $url -Headers (Get-GraphHeaders $Token)
-        Write-Verbose "File state: $($file.uploadState)"
+        Write-Host "  File state: $($file.uploadState)"
         if ($file.uploadState -eq $ExpectedState)      { return $file }
         if ($file.uploadState -like '*Fail*' -or
             $file.uploadState -like '*Error*') {
@@ -358,11 +377,17 @@ function Publish-IntuneWin32App {
     $appBody = New-Win32LobAppBody -PackageInfo $PackageInfo `
         -IntuneWinFileName $iwFileName -DefaultPublisher $DefaultPublisher
     $appJson = ConvertTo-Json $appBody -Depth 10
-
     if ($ExistingAppId) {
-        Write-Host "Updating existing Intune app: $ExistingAppId"
-        Invoke-RestMethod -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$ExistingAppId" `
-            -Method Patch -Headers (Get-GraphHeaders $Token) -Body $appJson | Out-Null
+        # Only PATCH metadata if the app is already published — unpublished apps reject PATCH
+        $existing = Invoke-RestMethod -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$ExistingAppId" `
+            -Headers (Get-GraphHeaders $Token)
+        if ($existing.publishingState -eq 'published') {
+            Write-Host "Updating existing Intune app: $ExistingAppId"
+            Invoke-RestMethod -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$ExistingAppId" `
+                -Method Patch -Headers (Get-GraphHeaders $Token) -Body $appJson | Out-Null
+        } else {
+            Write-Host "Uploading content to existing app (state: $($existing.publishingState)): $ExistingAppId"
+        }
         $appId = $ExistingAppId
     } else {
         Write-Host "Creating new Intune app..."
@@ -374,7 +399,7 @@ function Publish-IntuneWin32App {
 
     # Step 2 – Create content version
     $cv        = Invoke-RestMethod `
-        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/contentVersions" `
+        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/microsoft.graph.win32LobApp/contentVersions" `
         -Method Post -Headers (Get-GraphHeaders $Token) -Body '{}'
     $versionId = $cv.id
     Write-Verbose "Content version: $versionId"
@@ -399,7 +424,7 @@ function Publish-IntuneWin32App {
     } | ConvertTo-Json
 
     $fileEntry = Invoke-RestMethod `
-        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/contentVersions/$versionId/files" `
+        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/microsoft.graph.win32LobApp/contentVersions/$versionId/files" `
         -Method Post -Headers (Get-GraphHeaders $Token) -Body $fileBody
     $fileId = $fileEntry.id
     Write-Verbose "File entry: $fileId"
@@ -407,15 +432,17 @@ function Publish-IntuneWin32App {
     # Step 5 – Wait for Azure Storage URI
     Write-Host "Waiting for Azure Storage URI..."
     $fileEntry = Wait-IntuneFileState -Token $Token -AppId $appId -VersionId $versionId `
-        -FileId $fileId -ExpectedState 'azureStorageUriRequestSuccess'
+        -FileId $fileId -ExpectedState 'azureStorageUriRequestSuccess' -TimeoutSeconds 120
 
     # Step 6 – Upload encrypted content to Azure Blob
-    Write-Host "Uploading .intunewin content to Azure Blob Storage..."
+    $fileSizeMb = [Math]::Round($encryptedSize / 1MB, 1)
+    Write-Host "Uploading .intunewin content ($fileSizeMb MB) to Azure Blob Storage..."
     Send-AzureBlobChunked -SasUrl $fileEntry.azureStorageUri -FilePath $innerFile
 
     # Step 7 – Commit file with encryption metadata
     $commitBody = @{
         fileEncryptionInfo = @{
+            '@odata.type'        = 'microsoft.graph.fileEncryptionInfo'
             encryptionKey        = $encNode.EncryptionKey
             macKey               = $encNode.MacKey
             initializationVector = $encNode.InitializationVector
@@ -427,12 +454,12 @@ function Publish-IntuneWin32App {
     } | ConvertTo-Json -Depth 5
 
     Invoke-RestMethod `
-        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/contentVersions/$versionId/files/$fileId/commit" `
+        -Uri "$script:GraphBaseUrl/deviceAppManagement/mobileApps/$appId/microsoft.graph.win32LobApp/contentVersions/$versionId/files/$fileId/commit" `
         -Method Post -Headers (Get-GraphHeaders $Token) -Body $commitBody | Out-Null
 
-    Write-Host "Waiting for commit confirmation..."
+    Write-Host "Waiting for commit confirmation (may take several minutes for large packages)..."
     Wait-IntuneFileState -Token $Token -AppId $appId -VersionId $versionId `
-        -FileId $fileId -ExpectedState 'commitFileSuccess' | Out-Null
+        -FileId $fileId -ExpectedState 'commitFileSuccess' -TimeoutSeconds 600 | Out-Null
 
     # Step 8 – Set committed content version on the app
     $patchBody = @{
@@ -491,5 +518,5 @@ function Add-IntuneAppGroupAssignment {
 }
 
 Export-ModuleMember -Function Get-GraphToken, Find-ExistingIntuneApp, `
-    Get-AllIntuneWin32Apps, Find-IntuneAppByPackageId, Compare-AppVersion, `
+    Get-AllIntuneWin32Apps, Find-IntuneAppByPackageId, Get-IntuneAppVersion, Compare-AppVersion, `
     Get-Win32DetectionRule, Publish-IntuneWin32App, Add-IntuneAppGroupAssignment
