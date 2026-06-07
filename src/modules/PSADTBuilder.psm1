@@ -370,7 +370,20 @@ function Invoke-IntuneWinPackaging {
     )
 
     if (-not (Test-Path $ToolPath)) {
-        throw "IntuneWinAppUtil.exe not found at '$ToolPath'.`nRun: .\tools\Get-IntuneWinAppUtil.ps1"
+        Write-Host ""
+        Write-Host "IntuneWinAppUtil.exe not found at '$ToolPath'." -ForegroundColor Yellow
+        $answer = Read-Host "Download it now? [Y/n]"
+        if ($answer -eq '' -or $answer -match '^[Yy]') {
+            Write-Host "Downloading IntuneWinAppUtil.exe..." -ForegroundColor Cyan
+            New-Item -ItemType Directory -Path (Split-Path $ToolPath -Parent) -Force | Out-Null
+            Invoke-WebRequest `
+                -Uri 'https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool/raw/master/IntuneWinAppUtil.exe' `
+                -OutFile $ToolPath `
+                -UseBasicParsing
+            Write-Host "Downloaded to: $ToolPath" -ForegroundColor Green
+        } else {
+            throw "IntuneWinAppUtil.exe not found at '$ToolPath'. Run: .\tools\Get-IntuneWinAppUtil.ps1"
+        }
     }
 
     if (-not $OutputPath) {
