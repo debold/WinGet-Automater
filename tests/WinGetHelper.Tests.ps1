@@ -45,6 +45,13 @@ Describe 'Get-WinGetManifest – VideoLAN.VLC (EXE, well-known)' {
     It 'Architecture is a known value' {
         $script:vlc.Architecture | Should -BeIn @('x64', 'x86', 'arm64', 'neutral')
     }
+    It 'InformationUrl is an HTTPS URL or null' {
+        if ($script:vlc.InformationUrl) {
+            $script:vlc.InformationUrl | Should -Match '^https?://'
+        } else {
+            $script:vlc.InformationUrl | Should -BeNullOrEmpty
+        }
+    }
     It 'Result is an OrderedDictionary' {
         $script:vlc | Should -BeOfType [System.Collections.Specialized.OrderedDictionary]
     }

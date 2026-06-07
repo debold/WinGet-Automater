@@ -71,6 +71,8 @@ function Get-WinGetManifest {
         Publisher         = $null
         Description       = $null
         License           = $null
+        InformationUrl    = $null
+        PrivacyUrl        = $null
         InstallerUrl      = $null
         InstallerSha256   = $null
         InstallerType     = $null
@@ -104,10 +106,12 @@ function Get-WinGetManifest {
         }
         elseif ($file.name -match '\.locale\.en-US\.yaml$') {
             $data = ConvertFrom-Yaml $content
-            $result.Name        = $data.PackageName
-            $result.Publisher   = $data.Publisher
-            $result.Description = $data.ShortDescription
-            $result.License     = $data.License
+            $result.Name           = $data.PackageName
+            $result.Publisher      = $data.Publisher
+            $result.Description    = $data.ShortDescription
+            $result.License        = $data.License
+            $result.InformationUrl = $data.PackageUrl
+            $result.PrivacyUrl     = $data.PrivacyUrl
         }
         elseif ($file.name -notmatch '\.(installer|locale)\.') {
             $data = ConvertFrom-Yaml $content

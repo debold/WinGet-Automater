@@ -93,14 +93,25 @@ function script:New-Win32LobAppBody {
 
     $detectionRule = Get-Win32DetectionRule -PackageInfo $PackageInfo
 
+    $archMap = @{
+        x64     = 'x64'
+        x86     = 'x86'
+        arm64   = 'arm64'
+        arm     = 'arm'
+        neutral = 'neutral'
+    }
+    $arch = $archMap[$PackageInfo.Architecture?.ToLower()] ?? 'x64'
+
     return @{
         '@odata.type'           = '#microsoft.graph.win32LobApp'
         displayName             = $PackageInfo.Name
         displayVersion          = $PackageInfo.Version
         description             = $PackageInfo.Description ?? "$($PackageInfo.Name) – deployed via WinGet-Automater"
         publisher               = $PackageInfo.Publisher ?? $DefaultPublisher
+        informationUrl          = $PackageInfo.InformationUrl
+        privacyInformationUrl   = $PackageInfo.PrivacyUrl
         fileName                = $IntuneWinFileName
-        applicableArchitectures = 'x64'
+        applicableArchitectures = $arch
         installCommandLine      = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File Deploy-Application.ps1 -DeploymentType Install -DeployMode Silent'
         uninstallCommandLine    = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File Deploy-Application.ps1 -DeploymentType Uninstall -DeployMode Silent'
         installExperience       = @{

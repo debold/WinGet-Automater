@@ -203,6 +203,8 @@ Describe 'New-Win32LobAppBody – app object structure' {
                 Publisher         = 'Test Publisher'
                 Description       = 'A test'
                 License           = 'MIT'
+                InformationUrl    = 'https://example.com/info'
+                PrivacyUrl        = 'https://example.com/privacy'
                 InstallerUrl      = 'https://example.com/setup.exe'
                 InstallerSha256   = 'A' * 64
                 InstallerType     = 'exe'
@@ -249,6 +251,41 @@ Describe 'New-Win32LobAppBody – app object structure' {
         It 'detectionRules is a non-empty array' {
             $script:body.detectionRules | Should -Not -BeNullOrEmpty
             $script:body.detectionRules.Count | Should -BeGreaterThan 0
+        }
+        It 'informationUrl is mapped from PackageInfo.InformationUrl' {
+            $script:body.informationUrl | Should -Be 'https://example.com/info'
+        }
+        It 'privacyInformationUrl is mapped from PackageInfo.PrivacyUrl' {
+            $script:body.privacyInformationUrl | Should -Be 'https://example.com/privacy'
+        }
+        It 'applicableArchitectures reflects the installer architecture' {
+            $script:body.applicableArchitectures | Should -Be 'x64'
+        }
+    }
+}
+
+Describe 'New-Win32LobAppBody – architecture mapping' {
+    InModuleScope IntuneUploader {
+        It 'Maps x86 installer to x86' {
+            $info = [ordered]@{ Name = 'A'; Version = '1'; Publisher = 'P'; Description = $null
+                                InformationUrl = $null; PrivacyUrl = $null; Architecture = 'x86'
+                                InstallerType = 'exe'; ProductCode = $null }
+            $body = New-Win32LobAppBody -PackageInfo $info -IntuneWinFileName 'a.intunewin' -DefaultPublisher 'P'
+            $body.applicableArchitectures | Should -Be 'x86'
+        }
+        It 'Maps arm64 installer to arm64' {
+            $info = [ordered]@{ Name = 'A'; Version = '1'; Publisher = 'P'; Description = $null
+                                InformationUrl = $null; PrivacyUrl = $null; Architecture = 'arm64'
+                                InstallerType = 'exe'; ProductCode = $null }
+            $body = New-Win32LobAppBody -PackageInfo $info -IntuneWinFileName 'a.intunewin' -DefaultPublisher 'P'
+            $body.applicableArchitectures | Should -Be 'arm64'
+        }
+        It 'Falls back to x64 for unknown architecture' {
+            $info = [ordered]@{ Name = 'A'; Version = '1'; Publisher = 'P'; Description = $null
+                                InformationUrl = $null; PrivacyUrl = $null; Architecture = $null
+                                InstallerType = 'exe'; ProductCode = $null }
+            $body = New-Win32LobAppBody -PackageInfo $info -IntuneWinFileName 'a.intunewin' -DefaultPublisher 'P'
+            $body.applicableArchitectures | Should -Be 'x64'
         }
     }
 }
