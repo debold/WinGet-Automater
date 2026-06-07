@@ -126,7 +126,13 @@ To build a package locally without uploading to Intune, add -SkipUpload (no conf
 "@
     }
     Write-Host "No config.json found — using defaults for local build (-SkipUpload)." -ForegroundColor Yellow
-    $cfg = [PSCustomObject]@{ auth = @{}; intune = @{}; build = @{}; github = @{}; branding = $null }
+    $cfg = [PSCustomObject]@{
+        auth    = [PSCustomObject]@{ tenantId = ''; clientId = ''; clientSecret = '' }
+        intune  = [PSCustomObject]@{ defaultPublisher = 'WinGet-Automater'; assignmentGroupId = ''; assignmentIntent = 'available' }
+        build   = [PSCustomObject]@{ outputPath = 'output'; psadtVersion = '4.1.8'; intuneWinToolPath = 'tools\IntuneWinAppUtil.exe'; keepBuildArtifacts = $true }
+        github  = [PSCustomObject]@{ token = '' }
+        branding = $null
+    }
 } else {
     $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
 }
