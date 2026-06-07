@@ -373,9 +373,9 @@ foreach ($pkg in $packages) {
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
-$ok    = ($results | Where-Object Status -in 'Uploaded','Updated','Redeployed','Built').Count
-$skip  = ($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped','UpToDate').Count
-$fail  = ($results | Where-Object Status -eq 'Error').Count
+$ok    = @($results | Where-Object Status -in 'Uploaded','Updated','Redeployed','Built').Count
+$skip  = @($results | Where-Object Status -in 'AlreadyExists','NewerExists','Skipped','UpToDate').Count
+$fail  = @($results | Where-Object Status -eq 'Error').Count
 
 Write-Host "`n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 Write-Host " Summary  ✓ $ok  ─ $skip skipped  ✗ $fail errors" -ForegroundColor White
