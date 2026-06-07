@@ -573,13 +573,12 @@ Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' {
         $script:ToolPath5 = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
 
         if (-not (Test-Path $script:ToolPath5)) {
-            Write-Host 'Downloading IntuneWinAppUtil.exe...' -ForegroundColor Cyan
+            Write-Verbose 'Downloading IntuneWinAppUtil.exe...'
             New-Item -ItemType Directory -Path (Split-Path $script:ToolPath5 -Parent) -Force | Out-Null
             Invoke-WebRequest `
                 -Uri 'https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool/raw/master/IntuneWinAppUtil.exe' `
                 -OutFile $script:ToolPath5 `
                 -UseBasicParsing
-            Write-Host "Downloaded to: $script:ToolPath5" -ForegroundColor Green
         }
 
         # Minimal package folder – no PSADT framework download required
