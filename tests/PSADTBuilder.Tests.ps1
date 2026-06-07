@@ -11,6 +11,10 @@
 BeforeDiscovery {
     # Module must be loaded during discovery so InModuleScope blocks are resolvable.
     Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
+
+    # Invoke-IntuneWinPackaging tests require the real tool binary.
+    $script:IntuneWinToolPath = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
+    $script:SkipIntuneWin     = -not (Test-Path $script:IntuneWinToolPath)
 }
 
 BeforeAll {
@@ -559,5 +563,77 @@ Describe 'Set-PSADTBranding' {
             $branding = [PSCustomObject]@{ companyName = ''; bannerImagePath = ''; iconPath = 'C:\DoesNotExist\icon.ico' }
             { Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding } | Should -Not -Throw
         }
+    }
+}
+
+# ─── Invoke-IntuneWinPackaging – end-to-end .intunewin creation ───────────────
+# Requires tools\IntuneWinAppUtil.exe. Run .\tools\Get-IntuneWinAppUtil.ps1 first.
+# The entire Describe is skipped automatically when the tool is absent.
+
+Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' -Skip:$script:SkipIntuneWin {
+    BeforeAll {
+        $script:TempOut5  = Join-Path $env:TEMP "PSADTTest_$(New-Guid)"
+        $script:TempWin5  = Join-Path $env:TEMP "IntuneWin_$(New-Guid)"
+        $script:ToolPath5 = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
+
+        $script:PackageInfo5 = [ordered]@{
+            PackageId         = 'Test.Package'
+            Version           = '1.0.0'
+            Name              = 'Test App'
+            Publisher         = 'Test Publisher'
+            Description       = $null
+            License           = $null
+            InformationUrl    = $null
+            PrivacyUrl        = $null
+            InstallerUrl      = 'https://example.com/setup.exe'
+            InstallerSha256   = 'A' * 64
+            InstallerType     = 'exe'
+            InstallerSwitches = '/S'
+            ProductCode       = $null
+            Architecture      = 'x64'
+        }
+
+        Mock -ModuleName PSADTBuilder Invoke-WebRequest {
+            $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
+            [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
+        } -ParameterFilter { $Uri -like 'https://example.com/*' }
+
+        Mock -ModuleName PSADTBuilder Get-FileHash {
+            return [PSCustomObject]@{ Hash = 'A' * 64 }
+        }
+
+        $script:PackagePath5 = New-PSADTPackage `
+            -PackageInfo  $script:PackageInfo5 `
+            -OutputPath   $script:TempOut5 `
+            -TemplatePath $script:TemplatePath `
+            -PSADTVersion '4.1.8'
+
+        $script:IntuneWinPath5 = Invoke-IntuneWinPackaging `
+            -PackagePath $script:PackagePath5 `
+            -ToolPath    $script:ToolPath5 `
+            -OutputPath  $script:TempWin5
+    }
+
+    AfterAll {
+        Remove-Item $script:TempOut5 -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $script:TempWin5 -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'Returns the path to the .intunewin file' {
+        $script:IntuneWinPath5 | Should -Not -BeNullOrEmpty
+    }
+    It '.intunewin file exists on disk' {
+        Test-Path $script:IntuneWinPath5 | Should -BeTrue
+    }
+    It '.intunewin file has the .intunewin extension' {
+        $script:IntuneWinPath5 | Should -Match '\.intunewin$'
+    }
+    It '.intunewin file is non-empty' {
+        (Get-Item $script:IntuneWinPath5).Length | Should -BeGreaterThan 0
+    }
+    It '.intunewin file is a valid ZIP archive (PK magic bytes)' {
+        $bytes = [System.IO.File]::ReadAllBytes($script:IntuneWinPath5)
+        $bytes[0] | Should -Be 0x50   # 'P'
+        $bytes[1] | Should -Be 0x4B   # 'K'
     }
 }
