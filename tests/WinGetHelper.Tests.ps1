@@ -75,11 +75,8 @@ Describe 'Get-WinGetManifest – 7zip.7zip (second well-known package)' {
         $script:zip.InstallerType | Should -Not -BeNullOrEmpty
     }
     It 'ProductCode is a GUID when InstallerType is msi' {
-        if ($script:zip.InstallerType -eq 'msi') {
-            $script:zip.ProductCode | Should -Match '^\{[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}\}$'
-        } else {
-            Set-ItResult -Skipped -Because 'ProductCode GUID only applies to MSI installers'
-        }
+        if ($script:zip.InstallerType -ne 'msi') { return }
+        $script:zip.ProductCode | Should -Match '^\{[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}\}$'
     }
 }
 

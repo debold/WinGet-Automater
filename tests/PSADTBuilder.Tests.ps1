@@ -564,12 +564,11 @@ Describe 'Set-PSADTBranding' {
 }
 
 # ─── Invoke-IntuneWinPackaging – end-to-end .intunewin creation ───────────────
-# Requires tools\IntuneWinAppUtil.exe. Run .\tools\Get-IntuneWinAppUtil.ps1 first.
-# The entire Describe is skipped automatically when the tool is absent.
+# IntuneWinAppUtil.exe is downloaded automatically on first run.
 
 Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' {
     BeforeAll {
-        $script:TempOut5  = Join-Path $env:TEMP "PSADTTest_$(New-Guid)"
+        $script:TempPkg5  = Join-Path $env:TEMP "IntuneWinSrc_$(New-Guid)"
         $script:TempWin5  = Join-Path $env:TEMP "IntuneWin_$(New-Guid)"
         $script:ToolPath5 = Join-Path $PSScriptRoot '../tools/IntuneWinAppUtil.exe'
 
@@ -583,46 +582,21 @@ Describe 'Invoke-IntuneWinPackaging – creates .intunewin file' {
             Write-Host "Downloaded to: $script:ToolPath5" -ForegroundColor Green
         }
 
-        $script:PackageInfo5 = [ordered]@{
-            PackageId         = 'Test.Package'
-            Version           = '1.0.0'
-            Name              = 'Test App'
-            Publisher         = 'Test Publisher'
-            Description       = $null
-            License           = $null
-            InformationUrl    = $null
-            PrivacyUrl        = $null
-            InstallerUrl      = 'https://example.com/setup.exe'
-            InstallerSha256   = 'A' * 64
-            InstallerType     = 'exe'
-            InstallerSwitches = '/S'
-            ProductCode       = $null
-            Architecture      = 'x64'
-        }
-
-        Mock -ModuleName PSADTBuilder Invoke-WebRequest {
-            $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
-            [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
-        } -ParameterFilter { $Uri -like 'https://example.com/*' }
-
-        Mock -ModuleName PSADTBuilder Get-FileHash {
-            return [PSCustomObject]@{ Hash = 'A' * 64 }
-        }
-
-        $script:PackagePath5 = New-PSADTPackage `
-            -PackageInfo  $script:PackageInfo5 `
-            -OutputPath   $script:TempOut5 `
-            -TemplatePath $script:TemplatePath `
-            -PSADTVersion '4.1.8'
+        # Minimal package folder – no PSADT framework download required
+        New-Item -ItemType Directory -Path (Join-Path $script:TempPkg5 'Files') -Force | Out-Null
+        Set-Content (Join-Path $script:TempPkg5 'Deploy-Application.ps1') `
+            -Value '# minimal test entry point' -Encoding UTF8
+        Set-Content (Join-Path $script:TempPkg5 'Files\payload.txt') `
+            -Value 'test payload' -Encoding UTF8
 
         $script:IntuneWinPath5 = Invoke-IntuneWinPackaging `
-            -PackagePath $script:PackagePath5 `
+            -PackagePath $script:TempPkg5 `
             -ToolPath    $script:ToolPath5 `
             -OutputPath  $script:TempWin5
     }
 
     AfterAll {
-        Remove-Item $script:TempOut5 -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $script:TempPkg5 -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $script:TempWin5 -Recurse -Force -ErrorAction SilentlyContinue
     }
 
