@@ -44,6 +44,7 @@ Microsoft Graph API      Win32 App in Intune anlegen, Datei hochladen,
   - [Nur bauen, nicht hochladen](#nur-bauen-nicht-hochladen)
   - [Batch-Modus](#batch-modus)
   - [Paket neu bauen (Force)](#paket-neu-bauen-force)
+- [Globales Branding (PSADT UI)](#globales-branding-psadt-ui)
 - [Paketspezifische Customizations](#paketspezifische-customizations)
 - [Deploy-Application.ps1 anpassen](#deploy-applicationps1-anpassen)
   - [Wann anpassen?](#wann-anpassen)
@@ -290,6 +291,37 @@ Der typische Entwicklungs-Loop:
 2. .\src\Invoke-WinGetAutomater.ps1 -PackageId "Adobe.Acrobat.Reader" -Redeploy
 3. In Intune testen → Gerät synchronisieren lassen
 4. Falls nötig: zurück zu 1.
+```
+
+---
+
+## Globales Branding (PSADT UI)
+
+Die PSADT-Dialoge zeigen standardmäßig den PSADT-Markennamen. Über den `branding`-Block in `config.json` lässt sich die UI global für alle Pakete anpassen:
+
+```json
+"branding": {
+  "companyName":     "Contoso GmbH",
+  "bannerImagePath": "branding\\banner.png",
+  "iconPath":        "branding\\icon.ico"
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `companyName` | Wird als `<Toolkit_CompanyName>` in `AppDeployToolkitConfig.xml` gesetzt und erscheint in Installations-Dialogen |
+| `bannerImagePath` | PNG-Datei (empfohlen: 450 × 128 px), ersetzt das PSADT-Standard-Banner |
+| `iconPath` | ICO-Datei, erscheint als Fenster-Icon in allen PSADT-Dialogen |
+
+Pfade können absolut oder relativ zum Projekt-Root angegeben werden. Alle Felder sind optional — fehlende oder leere Werte werden stillschweigend ignoriert. Fehlende Dateien erzeugen eine Warnung, aber keinen Abbruch.
+
+Empfohlene Verzeichnisstruktur:
+
+```
+WinGet-Automater/
+└── branding/
+    ├── banner.png    # 450 × 128 px
+    └── icon.ico
 ```
 
 ---

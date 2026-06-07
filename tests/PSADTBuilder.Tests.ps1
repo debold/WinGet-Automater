@@ -475,3 +475,83 @@ Describe 'New-PSADTPackage – extra files are injected from customizations\File
         Get-Content (Join-Path $script:Result4 'Files\license.xml') | Should -Match '<License'
     }
 }
+
+# ─── Set-PSADTBranding ────────────────────────────────────────────────────────
+
+Describe 'Set-PSADTBranding' {
+
+    BeforeAll {
+        # Build a minimal fake AppDeployToolkit folder with a stub config XML
+        $script:BrandTestDir = Join-Path $TestDrive 'BrandPkg'
+        $adtDir = Join-Path $script:BrandTestDir 'AppDeployToolkit'
+        New-Item -ItemType Directory -Path $adtDir -Force | Out-Null
+
+        $script:ConfigXml = Join-Path $adtDir 'AppDeployToolkitConfig.xml'
+        Set-Content $script:ConfigXml -Value @'
+<?xml version="1.0" encoding="utf-8"?>
+<AppDeployToolkit_Config>
+  <Toolkit_Options>
+    <Toolkit_CompanyName>PS App Deploy Toolkit</Toolkit_CompanyName>
+  </Toolkit_Options>
+</AppDeployToolkit_Config>
+'@ -Encoding UTF8
+    }
+
+    Context 'Company name patching' {
+        BeforeAll {
+            $branding = [PSCustomObject]@{ companyName = 'Contoso GmbH'; bannerImagePath = ''; iconPath = '' }
+            Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding
+        }
+
+        It 'Sets Toolkit_CompanyName in the config XML' {
+            [xml]$xml = Get-Content $script:ConfigXml -Encoding UTF8
+            $xml.SelectSingleNode('//Toolkit_CompanyName').InnerText | Should -Be 'Contoso GmbH'
+        }
+    }
+
+    Context 'Banner image replacement' {
+        BeforeAll {
+            # Create a fake source banner
+            $script:FakeBanner = Join-Path $TestDrive 'mybanner.png'
+            Set-Content $script:FakeBanner -Value 'PNG_FAKE' -Encoding UTF8
+
+            $branding = [PSCustomObject]@{ companyName = ''; bannerImagePath = $script:FakeBanner; iconPath = '' }
+            Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding
+        }
+
+        It 'Copies the banner to AppDeployToolkit\AppDeployToolkitBanner.png' {
+            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitBanner.png'
+            Test-Path $dest | Should -BeTrue
+        }
+        It 'Banner content matches the source file' {
+            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitBanner.png'
+            Get-Content $dest | Should -Be 'PNG_FAKE'
+        }
+    }
+
+    Context 'Icon replacement' {
+        BeforeAll {
+            $script:FakeIcon = Join-Path $TestDrive 'myicon.ico'
+            Set-Content $script:FakeIcon -Value 'ICO_FAKE' -Encoding UTF8
+
+            $branding = [PSCustomObject]@{ companyName = ''; bannerImagePath = ''; iconPath = $script:FakeIcon }
+            Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding
+        }
+
+        It 'Copies the icon to AppDeployToolkit\AppDeployToolkitIcon.ico' {
+            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitIcon.ico'
+            Test-Path $dest | Should -BeTrue
+        }
+    }
+
+    Context 'Missing source files are skipped without error' {
+        It 'Does not throw when bannerImagePath does not exist' {
+            $branding = [PSCustomObject]@{ companyName = ''; bannerImagePath = 'C:\DoesNotExist\banner.png'; iconPath = '' }
+            { Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding } | Should -Not -Throw
+        }
+        It 'Does not throw when iconPath does not exist' {
+            $branding = [PSCustomObject]@{ companyName = ''; bannerImagePath = ''; iconPath = 'C:\DoesNotExist\icon.ico' }
+            { Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding } | Should -Not -Throw
+        }
+    }
+}

@@ -112,6 +112,65 @@ function Get-PackageCustomization {
     return $result
 }
 
+function Set-PSADTBranding {
+    <#
+    .SYNOPSIS
+        Applies global company branding to a PSADT package folder (company name, banner, icon).
+        Must be called after the AppDeployToolkit\ folder has been copied into the package.
+    .PARAMETER PackagePath
+        Root of the built package folder (contains AppDeployToolkit\).
+    .PARAMETER Branding
+        PSCustomObject with optional fields: companyName, bannerImagePath, iconPath.
+        Fields that are empty or missing are silently skipped.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$PackagePath,
+        [Parameter(Mandatory)] [PSCustomObject]$Branding
+    )
+
+    $adtFolder  = Join-Path $PackagePath 'AppDeployToolkit'
+    $configFile = Join-Path $adtFolder 'AppDeployToolkitConfig.xml'
+
+    # ── Company name → AppDeployToolkitConfig.xml ────────────────────────────
+    if (-not [string]::IsNullOrWhiteSpace($Branding.companyName) -and (Test-Path $configFile)) {
+        [xml]$xml = Get-Content $configFile -Encoding UTF8
+        $node = $xml.SelectSingleNode('//Toolkit_CompanyName')
+        if ($node) {
+            $node.InnerText = $Branding.companyName
+            $xml.Save($configFile)
+            Write-Verbose "Branding: companyName = '$($Branding.companyName)'"
+        } else {
+            Write-Warning "Branding: <Toolkit_CompanyName> node not found in AppDeployToolkitConfig.xml — skipping."
+        }
+    }
+
+    # ── Banner image ──────────────────────────────────────────────────────────
+    if (-not [string]::IsNullOrWhiteSpace($Branding.bannerImagePath)) {
+        $src = $Branding.bannerImagePath
+        if (Test-Path $src) {
+            $ext  = [System.IO.Path]::GetExtension($src)
+            $dest = Join-Path $adtFolder "AppDeployToolkitBanner$ext"
+            Copy-Item $src -Destination $dest -Force
+            Write-Verbose "Branding: banner → $dest"
+        } else {
+            Write-Warning "Branding: bannerImagePath '$src' not found — skipping."
+        }
+    }
+
+    # ── Icon file ─────────────────────────────────────────────────────────────
+    if (-not [string]::IsNullOrWhiteSpace($Branding.iconPath)) {
+        $src = $Branding.iconPath
+        if (Test-Path $src) {
+            $dest = Join-Path $adtFolder 'AppDeployToolkitIcon.ico'
+            Copy-Item $src -Destination $dest -Force
+            Write-Verbose "Branding: icon → $dest"
+        } else {
+            Write-Warning "Branding: iconPath '$src' not found — skipping."
+        }
+    }
+}
+
 function New-PSADTPackage {
     <#
     .SYNOPSIS
@@ -146,7 +205,8 @@ function New-PSADTPackage {
 
         [string]$PSADTVersion        = '4.0.4',
         [string]$PSADTCachePath      = (Join-Path $env:TEMP 'PSADT-Cache'),
-        [string]$CustomizationsPath  = ''
+        [string]$CustomizationsPath  = '',
+        [PSCustomObject]$Branding    = $null
     )
 
     $packageFolder = Join-Path $OutputPath $PackageInfo.PackageId $PackageInfo.Version
@@ -161,6 +221,11 @@ function New-PSADTPackage {
     $adtDest     = Join-Path $packageFolder 'AppDeployToolkit'
     Write-Verbose "Copying PSADT framework to $adtDest..."
     Copy-Item -Path (Join-Path $psadtSource 'AppDeployToolkit') -Destination $adtDest -Recurse -Force
+
+    # Apply global branding (company name, banner, icon)
+    if ($Branding) {
+        Set-PSADTBranding -PackagePath $packageFolder -Branding $Branding
+    }
 
     # Download installer
     $installerFileName = Get-WinGetInstallerFileName -PackageInfo $PackageInfo
@@ -331,4 +396,4 @@ function Invoke-IntuneWinPackaging {
     return $result.FullName
 }
 
-Export-ModuleMember -Function Get-PSADTFramework, New-PSADTPackage, Invoke-IntuneWinPackaging, Get-PackageCustomization
+Export-ModuleMember -Function Get-PSADTFramework, New-PSADTPackage, Invoke-IntuneWinPackaging, Get-PackageCustomization, Set-PSADTBranding

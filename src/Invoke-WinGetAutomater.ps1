@@ -133,6 +133,17 @@ $resolvedOut = if ($OutputPath) { $OutputPath } else {
     Resolve-RelativePath ($cfg.build.outputPath ?? 'output')
 }
 
+# Resolve branding file paths relative to script root
+$branding = $cfg.branding
+if ($branding) {
+    if (-not [string]::IsNullOrWhiteSpace($branding.bannerImagePath)) {
+        $branding.bannerImagePath = Resolve-RelativePath $branding.bannerImagePath
+    }
+    if (-not [string]::IsNullOrWhiteSpace($branding.iconPath)) {
+        $branding.iconPath = Resolve-RelativePath $branding.iconPath
+    }
+}
+
 # ─── Collect package list ─────────────────────────────────────────────────────
 
 $packages = if ($PSCmdlet.ParameterSetName -eq 'SinglePackage') {
@@ -209,7 +220,8 @@ foreach ($pkg in $packages) {
             $packageFolder = New-PSADTPackage -PackageInfo $packageInfo `
                 -OutputPath $resolvedOut -TemplatePath $templatePath `
                 -PSADTVersion ($cfg.build.psadtVersion ?? '4.0.4') `
-                -CustomizationsPath $CustomizationsPath
+                -CustomizationsPath $CustomizationsPath `
+                -Branding $branding
         }
 
         # 2b – Review pause

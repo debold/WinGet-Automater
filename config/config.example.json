@@ -26,5 +26,12 @@
   "github": {
     "_comment": "Optional: Personal Access Token to avoid API rate limiting (60 req/h unauthenticated)",
     "token": ""
+  },
+
+  "branding": {
+    "_comment": "Global PSADT UI branding applied to every package. All fields are optional.",
+    "companyName":    "",
+    "bannerImagePath": "",
+    "iconPath":        ""
   }
 }
