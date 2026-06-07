@@ -219,7 +219,7 @@ foreach ($pkg in $packages) {
             Write-Host "[2/4] Building PSADT v4 package..."
             $packageFolder = New-PSADTPackage -PackageInfo $packageInfo `
                 -OutputPath $resolvedOut -TemplatePath $templatePath `
-                -PSADTVersion ($cfg.build.psadtVersion ?? '4.0.4') `
+                -PSADTVersion ($cfg.build.psadtVersion ?? '4.1.8') `
                 -CustomizationsPath $CustomizationsPath `
                 -Branding $branding
         }

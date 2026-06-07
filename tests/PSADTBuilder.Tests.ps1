@@ -231,7 +231,7 @@ Describe 'New-PSADTPackage – template substitution and folder structure' {
             -PackageInfo   $script:PackageInfo `
             -OutputPath    $script:TempOut `
             -TemplatePath  $script:TemplatePath `
-            -PSADTVersion  '4.0.4'
+            -PSADTVersion  '4.1.8'
     }
 
     AfterAll {
@@ -318,7 +318,7 @@ Describe 'New-PSADTPackage – SHA256 mismatch is rejected' {
                 -PackageInfo   $script:PackageInfo2 `
                 -OutputPath    $script:TempOut2 `
                 -TemplatePath  $script:TemplatePath `
-                -PSADTVersion  '4.0.4'
+                -PSADTVersion  '4.1.8'
         } | Should -Throw '*SHA256 mismatch*'
     }
 }
@@ -417,7 +417,7 @@ Describe 'New-PSADTPackage – customization snippets are injected' {
             -PackageInfo        $script:PackageInfo3 `
             -OutputPath         $script:TempOut3 `
             -TemplatePath       $script:TemplatePath `
-            -PSADTVersion       '4.0.4' `
+            -PSADTVersion       '4.1.8' `
             -CustomizationsPath $script:CustomDir
     }
 
@@ -476,7 +476,7 @@ Describe 'New-PSADTPackage – extra files are injected from customizations\File
             -PackageInfo        $script:PackageInfo4 `
             -OutputPath         $script:TempOut4 `
             -TemplatePath       $script:TemplatePath `
-            -PSADTVersion       '4.0.4' `
+            -PSADTVersion       '4.1.8' `
             -CustomizationsPath $script:CustomDir4
     }
 

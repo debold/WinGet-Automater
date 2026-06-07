@@ -18,7 +18,7 @@
   "build": {
     "_comment": "psadtVersion must match a tag on https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases",
     "outputPath":        "output",
-    "psadtVersion":      "4.0.4",
+    "psadtVersion":      "4.1.8",
     "intuneWinToolPath": "tools\\IntuneWinAppUtil.exe",
     "keepBuildArtifacts": true
   },

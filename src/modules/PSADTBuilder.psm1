@@ -10,7 +10,7 @@ function Get-PSADTFramework {
     [CmdletBinding()]
     [OutputType([string])]
     param(
-        [string]$Version  = '4.0.4',
+        [string]$Version  = '4.1.8',
         [string]$CachePath = (Join-Path $env:TEMP 'PSADT-Cache')
     )
 
@@ -203,7 +203,7 @@ function New-PSADTPackage {
         [Parameter(Mandatory)]
         [string]$TemplatePath,
 
-        [string]$PSADTVersion        = '4.0.4',
+        [string]$PSADTVersion        = '4.1.8',
         [string]$PSADTCachePath      = (Join-Path $env:TEMP 'PSADT-Cache'),
         [string]$CustomizationsPath  = '',
         [PSCustomObject]$Branding    = $null
