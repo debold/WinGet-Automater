@@ -154,7 +154,7 @@ function script:New-Win32LobAppBody {
         arm     = 'arm'
         neutral = 'neutral'
     }
-    $arch = $archMap[$PackageInfo.Architecture?.ToLower()] ?? 'x64'
+    $arch = if ($PackageInfo.Architecture) { $archMap[$PackageInfo.Architecture.ToLower()] ?? 'x64' } else { 'x64' }
 
     return @{
         '@odata.type'           = '#microsoft.graph.win32LobApp'

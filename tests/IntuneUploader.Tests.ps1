@@ -318,11 +318,13 @@ Describe 'Get-AllIntuneWin32Apps' {
             $script:apps.Count | Should -Be 2
         }
         It 'Queries the win32LobApp endpoint' {
+            Get-AllIntuneWin32Apps -Token 'test-token'
             Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
                 $Uri -like '*win32LobApp*'
             }
         }
         It 'Requests the notes field' {
+            Get-AllIntuneWin32Apps -Token 'test-token'
             Should -Invoke -ModuleName IntuneUploader Invoke-RestMethod -Times 1 -ParameterFilter {
                 $Uri -match '\$select=.*notes'
             }

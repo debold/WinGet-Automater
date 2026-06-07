@@ -15,6 +15,20 @@ BeforeDiscovery {
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '../src/modules/PSADTBuilder.psm1') -Force
     $script:TemplatePath = Join-Path $PSScriptRoot '../templates/Deploy-Application.ps1.template'
+
+    # Fake PSADT framework folder reused by all New-PSADTPackage tests.
+    # Get-PSADTFramework is mocked per-Describe to return this path, so no network call is made.
+    $script:FakePSADTPath = Join-Path $TestDrive 'FakePSADT'
+    $adtDir = Join-Path $script:FakePSADTPath 'AppDeployToolkit'
+    New-Item -ItemType Directory -Path $adtDir -Force | Out-Null
+    Set-Content -Path (Join-Path $adtDir 'AppDeployToolkitConfig.xml') -Encoding UTF8 -Value @'
+<?xml version="1.0" encoding="utf-8"?>
+<AppDeployToolkit_Config>
+  <Toolkit_Options>
+    <Toolkit_CompanyName>PS App Deploy Toolkit</Toolkit_CompanyName>
+  </Toolkit_Options>
+</AppDeployToolkit_Config>
+'@
 }
 
 # ─── Get-PSADTInstallBlocks ───────────────────────────────────────────────────
@@ -202,8 +216,8 @@ Describe 'New-PSADTPackage – template substitution and folder structure' {
             Architecture      = 'x64'
         }
 
-        # PSADT is public on GitHub – Get-PSADTFramework downloads it for real (cached in %TEMP%).
-        # Only the installer is mocked: we don't want to fetch 100 MB real app binaries in tests.
+        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
+
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
             [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
@@ -284,14 +298,14 @@ Describe 'New-PSADTPackage – SHA256 mismatch is rejected' {
             Architecture      = 'x64'
         }
 
-        # PSADT downloads for real; only the installer is mocked
+        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
+
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
             [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
         } -ParameterFilter { $Uri -like 'https://example.com/*' }
 
-        # Real Get-FileHash – computes the actual hash of the 2-byte MZ stub,
-        # which will NOT match the 'BBBB...' expected hash → triggers the mismatch error
+        # Get-FileHash is NOT mocked: real hash of the 2-byte MZ stub won't match 'BBBB...' → triggers mismatch
     }
 
     AfterAll {
@@ -388,6 +402,8 @@ Describe 'New-PSADTPackage – customization snippets are injected' {
             Architecture      = 'x64'
         }
 
+        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
+
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
             [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
@@ -444,6 +460,8 @@ Describe 'New-PSADTPackage – extra files are injected from customizations\File
             InstallerUrl = 'https://example.com/setup.exe'; InstallerSha256 = 'A' * 64
             InstallerType = 'exe'; InstallerSwitches = '/S'; ProductCode = $null; Architecture = 'x64'
         }
+
+        Mock -ModuleName PSADTBuilder Get-PSADTFramework { return $script:FakePSADTPath }
 
         Mock -ModuleName PSADTBuilder Invoke-WebRequest {
             $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
