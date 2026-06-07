@@ -36,8 +36,8 @@ param (
 [String]$appSetupFile   = '{{SETUP_FILE}}'
 [String]$appScriptAuthor = 'WinGet-Automater'
 
-## ── Import PSADT Module ───────────────────────────────────────────────────────
-Import-Module (Join-Path $PSScriptRoot 'AppDeployToolkit\PSAppDeployToolkit.psd1') -Force
+## ── Import PSADT Framework ───────────────────────────────────────────────────
+. (Join-Path $PSScriptRoot 'AppDeployToolkit\AppDeployToolkitMain.ps1')
 
 ## ── Open Session ─────────────────────────────────────────────────────────────
 $adtSession = Open-ADTSession `

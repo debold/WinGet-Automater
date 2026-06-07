@@ -17,16 +17,15 @@ function Get-PSADTFramework {
     $psadtPath  = Join-Path $CachePath "PSADT-$Version"
     $markerFile = Join-Path $psadtPath '.ready'
     $adtFolder  = Join-Path $psadtPath 'AppDeployToolkit'
-    $moduleFile = Join-Path $adtFolder 'PSAppDeployToolkit\PSAppDeployToolkit.psd1'
+    $mainFile   = Join-Path $adtFolder 'AppDeployToolkitMain.ps1'
 
-    if ((Test-Path $markerFile) -and (Test-Path $moduleFile)) {
+    if ((Test-Path $markerFile) -and (Test-Path $mainFile)) {
         Write-Verbose "Using cached PSADT $Version from $psadtPath"
         return $psadtPath
     }
 
-    # Invalidate incomplete cache (Template-only download lacks the PSAppDeployToolkit module)
     if (Test-Path $psadtPath) {
-        Write-Host "Refreshing incomplete PSADT cache..." -ForegroundColor Yellow
+        Write-Host "Refreshing PSADT cache..." -ForegroundColor Yellow
         Remove-Item $psadtPath -Recurse -Force
     }
 
@@ -35,7 +34,7 @@ function Get-PSADTFramework {
 
     $zipPath = "$psadtPath.zip"
 
-    $zipUrl = "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_v$Version.zip"
+    $zipUrl = "https://github.com/PSAppDeployToolkit/PSAppDeployToolkit/releases/download/$Version/PSAppDeployToolkit_Template_v4.zip"
 
     try {
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
@@ -61,11 +60,8 @@ function Get-PSADTFramework {
     }
     Remove-Item $extractPath -Recurse -Force
 
-    if (-not (Test-Path $adtFolder)) {
-        throw "PSADT extraction failed: 'AppDeployToolkit' folder not found after unzipping."
-    }
-    if (-not (Test-Path $moduleFile)) {
-        throw "PSADT extraction failed: PSAppDeployToolkit module not found. The downloaded zip may not be the full release package."
+    if (-not (Test-Path $mainFile)) {
+        throw "PSADT extraction failed: 'AppDeployToolkitMain.ps1' not found after unzipping."
     }
 
     New-Item -ItemType File -Path $markerFile -Force | Out-Null
