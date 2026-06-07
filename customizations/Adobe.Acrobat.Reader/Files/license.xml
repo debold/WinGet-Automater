@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adobe Acrobat Reader enterprise license file                    -->
+<!-- Ablage: customizations\Adobe.Acrobat.Reader\Files\license.xml  -->
+<!-- Wird beim Build automatisch in das PSADT-Paket unter Files\    -->
+<!-- kopiert und steht im Installer über $dirFiles\license.xml zur  -->
+<!-- Verfügung.                                                       -->
+<License>
+  <SerialNumber>REPLACE-WITH-REAL-LICENSE-KEY</SerialNumber>
+</License>

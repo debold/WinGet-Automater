@@ -418,3 +418,60 @@ Describe 'New-PSADTPackage – customization snippets are injected' {
         $content | Should -Not -Match '\{\{[A-Z_]+\}\}'
     }
 }
+
+Describe 'New-PSADTPackage – extra files are injected from customizations\Files\' {
+    BeforeAll {
+        $script:TempOut4  = Join-Path $env:TEMP "PSADTTest_$(New-Guid)"
+        $script:CustomDir4 = Join-Path $env:TEMP "Customizations_$(New-Guid)"
+        $pkgCustomDir4     = Join-Path $script:CustomDir4 'Test.Package'
+        $filesDir4         = Join-Path $pkgCustomDir4 'Files'
+        $supportDir4       = Join-Path $pkgCustomDir4 'SupportFiles'
+        New-Item -ItemType Directory -Path $filesDir4   -Force | Out-Null
+        New-Item -ItemType Directory -Path $supportDir4 -Force | Out-Null
+
+        Set-Content (Join-Path $filesDir4   'license.xml')  '<License/>'       -Encoding UTF8
+        Set-Content (Join-Path $filesDir4   'transform.mst') 'dummy transform'  -Encoding UTF8
+        Set-Content (Join-Path $supportDir4 'helper.ps1')   'Write-Host "hi"'  -Encoding UTF8
+
+        $script:PackageInfo4 = [ordered]@{
+            PackageId = 'Test.Package'; Version = '1.0.0'; Name = 'Test'; Publisher = 'P'
+            Description = $null; License = $null; InformationUrl = $null; PrivacyUrl = $null
+            InstallerUrl = 'https://example.com/setup.exe'; InstallerSha256 = 'A' * 64
+            InstallerType = 'exe'; InstallerSwitches = '/S'; ProductCode = $null; Architecture = 'x64'
+        }
+
+        Mock -ModuleName PSADTBuilder Invoke-WebRequest {
+            $null = New-Item -ItemType Directory -Path (Split-Path $OutFile -Parent) -Force
+            [System.IO.File]::WriteAllBytes($OutFile, [byte[]](0x4D, 0x5A))
+        } -ParameterFilter { $Uri -like 'https://example.com/*' }
+
+        Mock -ModuleName PSADTBuilder Get-FileHash {
+            return [PSCustomObject]@{ Hash = 'A' * 64 }
+        }
+
+        $script:Result4 = New-PSADTPackage `
+            -PackageInfo        $script:PackageInfo4 `
+            -OutputPath         $script:TempOut4 `
+            -TemplatePath       $script:TemplatePath `
+            -PSADTVersion       '4.0.4' `
+            -CustomizationsPath $script:CustomDir4
+    }
+
+    AfterAll {
+        Remove-Item $script:TempOut4   -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $script:CustomDir4 -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'license.xml from customizations\Files\ is present in package Files\' {
+        Test-Path (Join-Path $script:Result4 'Files\license.xml') | Should -BeTrue
+    }
+    It 'transform.mst from customizations\Files\ is present in package Files\' {
+        Test-Path (Join-Path $script:Result4 'Files\transform.mst') | Should -BeTrue
+    }
+    It 'helper.ps1 from customizations\SupportFiles\ is present in package SupportFiles\' {
+        Test-Path (Join-Path $script:Result4 'SupportFiles\helper.ps1') | Should -BeTrue
+    }
+    It 'Injected file content is preserved' {
+        Get-Content (Join-Path $script:Result4 'Files\license.xml') | Should -Match '<License'
+    }
+}

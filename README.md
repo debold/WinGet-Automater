@@ -329,6 +329,27 @@ foreach ($p in $paths) {
 }
 ```
 
+### Zusätzliche Dateien ins Paket injizieren
+
+Dateien in `customizations/<PackageId>/Files/` werden beim Build in den `Files\`-Ordner des PSADT-Pakets kopiert. Dateien in `customizations/<PackageId>/SupportFiles/` landen entsprechend in `SupportFiles\`. Unterordner werden beibehalten.
+
+```
+customizations/
+└── Adobe.Acrobat.Reader/
+    ├── Files/
+    │   ├── license.xml          ← im Skript erreichbar als $dirFiles\license.xml
+    │   └── AcroProStd.mst       ← MSI-Transform
+    └── SupportFiles/
+        └── Configure-Registry.ps1
+```
+
+Im `PostInstall.ps1` kann auf die injizierten Dateien über die PSADT-Variable `$dirFiles` zugegriffen werden:
+
+```powershell
+# license.xml wurde aus customizations\Files\ ins Paket kopiert
+Start-ADTProcess -FilePath "$dirFiles\setup.exe" -ArgumentList "/s /licfile `"$dirFiles\license.xml`""
+```
+
 ### Einfügestellen im generierten Skript
 
 ```
