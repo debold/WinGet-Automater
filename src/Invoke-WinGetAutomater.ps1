@@ -113,7 +113,16 @@ Import-Module (Join-Path $modulesPath 'IntuneUploader.psm1')  -Force
 
 $configPath = Resolve-RelativePath $ConfigFile
 if (-not (Test-Path $configPath)) {
-    throw "Config file not found: $configPath`nCopy config\config.example.json to config\config.json and fill in your credentials."
+    throw @"
+Config file not found: $configPath
+
+To get started:
+  1. Copy config\config.example.json  to  config\config.json
+  2. Fill in your Azure App Registration credentials (tenantId, clientId, clientSecret)
+  3. Optionally set build.outputPath, intune.assignmentGroupId, and branding fields
+
+To build a package without uploading to Intune, add -SkipUpload (auth is not required).
+"@
 }
 $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
 
