@@ -4,9 +4,8 @@ config/config.json
 # Build output
 output/
 
-# PSADT download cache (large files)
-# Keep if you want to avoid re-downloading
-# TEMP/PSADT-Cache/
+# PSADT download cache
+.psadt-cache/
 
 # IntuneWinAppUtil binary
 tools/IntuneWinAppUtil.exe

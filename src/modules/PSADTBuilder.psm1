@@ -11,7 +11,7 @@ function Get-PSADTFramework {
     [OutputType([string])]
     param(
         [string]$Version  = '4.1.8',
-        [string]$CachePath = (Join-Path $env:TEMP 'PSADT-Cache')
+        [string]$CachePath = ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..' '.psadt-cache')))
     )
 
     $psadtPath   = Join-Path $CachePath "PSADT-$Version"
@@ -210,7 +210,7 @@ function New-PSADTPackage {
         [string]$TemplatePath,
 
         [string]$PSADTVersion        = '4.1.8',
-        [string]$PSADTCachePath      = (Join-Path $env:TEMP 'PSADT-Cache'),
+        [string]$PSADTCachePath      = ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..' '.psadt-cache'))),
         [string]$CustomizationsPath  = '',
         [PSCustomObject]$Branding    = $null
     )
