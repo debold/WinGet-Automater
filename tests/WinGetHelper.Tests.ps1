@@ -184,3 +184,66 @@ Describe 'Get-WinGetLatestVersion – Integration (live GitHub)' {
         $elapsed | Should -BeLessThan 10
     }
 }
+
+# ─── Search-WinGetPackage ─────────────────────────────────────────────────────
+
+Describe 'Search-WinGetPackage – winget.run API fallback (mocked)' {
+    BeforeAll {
+        # Force the API fallback path: pretend Find-WinGetPackage does not exist
+        Mock -ModuleName WinGetHelper Get-Command { $null } -ParameterFilter { $Name -eq 'Find-WinGetPackage' }
+        Mock -ModuleName WinGetHelper Get-Module  { $null } -ParameterFilter { $Name -eq 'Microsoft.WinGet.Client' }
+
+        Mock -ModuleName WinGetHelper Invoke-RestMethod {
+            [PSCustomObject]@{
+                Packages = @(
+                    [PSCustomObject]@{
+                        Id       = 'VideoLAN.VLC'
+                        Versions = @('3.0.21', '3.0.20')
+                        Latest   = [PSCustomObject]@{ Name = 'VLC media player'; Publisher = 'VideoLAN' }
+                    },
+                    [PSCustomObject]@{
+                        Id       = 'Fake.Player'
+                        Versions = @('1.0.0')
+                        Latest   = [PSCustomObject]@{ Name = $null; Publisher = $null }
+                    }
+                )
+            }
+        } -ParameterFilter { $Uri -like 'https://api.winget.run/*' }
+
+        $script:searchResults = @(Search-WinGetPackage -Query 'vlc')
+    }
+
+    It 'Returns all packages from the API response' {
+        $script:searchResults.Count | Should -Be 2
+    }
+    It 'Maps Id to PackageId' {
+        $script:searchResults[0].PackageId | Should -Be 'VideoLAN.VLC'
+    }
+    It 'Maps Latest.Name to Name' {
+        $script:searchResults[0].Name | Should -Be 'VLC media player'
+    }
+    It 'Maps Latest.Publisher to Publisher' {
+        $script:searchResults[0].Publisher | Should -Be 'VideoLAN'
+    }
+    It 'Takes the first entry of Versions as Version' {
+        $script:searchResults[0].Version | Should -Be '3.0.21'
+    }
+    It 'Falls back to Id parts when Latest has no Name/Publisher' {
+        $script:searchResults[1].Name      | Should -Be 'Player'
+        $script:searchResults[1].Publisher | Should -Be 'Fake'
+    }
+    It 'Respects MaxResults' {
+        $limited = @(Search-WinGetPackage -Query 'vlc' -MaxResults 1)
+        $limited.Count | Should -Be 1
+    }
+}
+
+Describe 'Search-WinGetPackage – parameter validation' {
+    It 'Rejects an empty query' {
+        { Search-WinGetPackage -Query '' } | Should -Throw
+    }
+    It 'Rejects MaxResults outside 1-100' {
+        { Search-WinGetPackage -Query 'x' -MaxResults 0 }   | Should -Throw
+        { Search-WinGetPackage -Query 'x' -MaxResults 101 } | Should -Throw
+    }
+}

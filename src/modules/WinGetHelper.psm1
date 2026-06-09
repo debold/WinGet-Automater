@@ -171,6 +171,75 @@ function Get-WinGetLatestVersion {
     return $latest
 }
 
+function Search-WinGetPackage {
+    <#
+    .SYNOPSIS
+        Full-text search for WinGet packages by name, ID, publisher or keyword.
+    .DESCRIPTION
+        Uses the local WinGet client (Find-WinGetPackage from the Microsoft.WinGet.Client
+        module) when available — full-text search against the official index, no rate
+        limits. Falls back to the winget.run community REST API on systems without WinGet.
+    .PARAMETER Query
+        Search term, e.g. "vlc", "pdf reader", "7zip".
+    .PARAMETER MaxResults
+        Maximum number of results to return. Default: 20.
+    .OUTPUTS
+        PSCustomObject list with PackageId, Name, Publisher, Version.
+    .EXAMPLE
+        Search-WinGetPackage -Query "media player"
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Query,
+
+        [ValidateRange(1, 100)]
+        [int]$MaxResults = 20
+    )
+
+    # ── Preferred: local WinGet client (official index, full-text, no rate limit) ──
+    if (-not (Get-Command Find-WinGetPackage -ErrorAction SilentlyContinue)) {
+        if (Get-Module -ListAvailable -Name 'Microsoft.WinGet.Client') {
+            Import-Module Microsoft.WinGet.Client -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (Get-Command Find-WinGetPackage -ErrorAction SilentlyContinue) {
+        Write-Verbose "Searching via local WinGet client: '$Query'"
+        $found = Find-WinGetPackage -Query $Query -Source winget -ErrorAction Stop |
+            Select-Object -First $MaxResults
+
+        return @($found | ForEach-Object {
+            [PSCustomObject]@{
+                PackageId = $_.Id
+                Name      = $_.Name
+                Publisher = ($_.Id -split '\.')[0]
+                Version   = $_.Version
+            }
+        })
+    }
+
+    # ── Fallback: winget.run community REST API (no WinGet client required) ──────
+    Write-Verbose "WinGet client not available — searching via winget.run API: '$Query'"
+    $uri = "https://api.winget.run/v2/packages?query=$([uri]::EscapeDataString($Query))&take=$MaxResults"
+    try {
+        $resp = Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'WinGet-Automater/1.0' } -ErrorAction Stop
+    } catch {
+        throw "Search failed. Neither the Microsoft.WinGet.Client module nor the winget.run API is available.`nInstall the client module with: Install-Module Microsoft.WinGet.Client`nAPI error: $_"
+    }
+
+    return @($resp.Packages | Select-Object -First $MaxResults | ForEach-Object {
+        [PSCustomObject]@{
+            PackageId = $_.Id
+            Name      = $_.Latest.Name      ?? ($_.Id -split '\.')[-1]
+            Publisher = $_.Latest.Publisher ?? ($_.Id -split '\.')[0]
+            Version   = ($_.Versions | Select-Object -First 1)
+        }
+    })
+}
+
 function Get-WinGetInstallerFileName {
     [CmdletBinding()]
     param(
@@ -195,4 +264,4 @@ function Get-WinGetInstallerFileName {
     return "setup_$safeName$ext"
 }
 
-Export-ModuleMember -Function Get-WinGetManifest, Get-WinGetLatestVersion, Get-WinGetInstallerFileName
+Export-ModuleMember -Function Get-WinGetManifest, Get-WinGetLatestVersion, Get-WinGetInstallerFileName, Search-WinGetPackage

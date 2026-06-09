@@ -42,6 +42,7 @@ Microsoft Graph API      Win32 App in Intune anlegen, Datei hochladen,
   - [Bestimmte Version](#bestimmte-version)
   - [Mit Review-Pause](#mit-review-pause)
   - [Nur bauen, nicht hochladen](#nur-bauen-nicht-hochladen)
+  - [Pakete suchen und zur Liste hinzufügen](#pakete-suchen-und-zur-liste-hinzufügen)
   - [Batch-Modus](#batch-modus)
   - [Paket neu bauen (Force)](#paket-neu-bauen-force)
 - [Globales Branding (PSADT UI)](#globales-branding-psadt-ui)
@@ -250,6 +251,45 @@ Beispiel-Ausgabe:
 
 > **Tipp für automatisierte Umgebungen:** `-Sync` lässt sich als geplanter Task oder CI/CD-Job einrichten.
 > Mit einem GitHub-Token (`config.github.token`) bleibt man unter dem API-Rate-Limit auch bei vielen Paketen.
+
+### Pakete suchen und zur Liste hinzufügen
+
+Mit `Add-WinGetApp.ps1` lassen sich WinGet-Pakete per Volltextsuche finden und interaktiv
+zur `apps.json` hinzufügen — ohne die Paket-ID kennen zu müssen:
+
+```powershell
+# Volltextsuche nach Name, Publisher oder Stichwort
+.\src\Add-WinGetApp.ps1 vlc
+
+# Mehrere Wörter und mehr Treffer anzeigen
+.\src\Add-WinGetApp.ps1 -Query "pdf reader" -MaxResults 30
+
+# In eine andere apps-Datei schreiben
+.\src\Add-WinGetApp.ps1 firefox -AppsFile "C:\my\apps.json"
+```
+
+Ablauf:
+
+```
+Searching WinGet packages for: 'vlc'...
+
+     #  PackageId         Name              Version
+  ──────────────────────────────────────────────────
+  [ 1]  VideoLAN.VLC      VLC media player  3.0.21
+  [ 2]  VideoLAN.VLC.Nightly  VLC Nightly   4.0.0
+
+Select package(s) to add — e.g. 1 or 1,3,5 or 'a' for all  [Enter = cancel]: 1
+
+  + VideoLAN.VLC
+
+1 package(s) added to: C:\...\config\apps.json
+```
+
+- Die `apps.json` wird automatisch angelegt, falls sie noch nicht existiert.
+- Bereits enthaltene Pakete werden markiert und beim Hinzufügen übersprungen (keine Duplikate).
+- Die Suche nutzt bevorzugt den lokalen WinGet-Client (`Microsoft.WinGet.Client`-Modul,
+  Volltextsuche ohne Rate-Limit). Ist dieser nicht verfügbar, dient die
+  [winget.run](https://winget.run)-API als Fallback.
 
 ### Batch-Modus
 
