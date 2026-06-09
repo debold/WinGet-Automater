@@ -488,12 +488,13 @@ Describe 'New-PSADTPackage – extra files are injected from customizations\File
 Describe 'Set-PSADTBranding' {
 
     BeforeAll {
-        # Build a minimal fake AppDeployToolkit folder with a stub config XML
+        # Build a minimal PSADT v4 package folder structure: Config\ and Assets\
         $script:BrandTestDir = Join-Path $TestDrive 'BrandPkg'
-        $adtDir = Join-Path $script:BrandTestDir 'AppDeployToolkit'
-        New-Item -ItemType Directory -Path $adtDir -Force | Out-Null
+        $configDir = Join-Path $script:BrandTestDir 'Config'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $script:BrandTestDir 'Assets') -Force | Out-Null
 
-        $script:ConfigXml = Join-Path $adtDir 'AppDeployToolkitConfig.xml'
+        $script:ConfigXml = Join-Path $configDir 'AppDeployToolkitConfig.xml'
         Set-Content $script:ConfigXml -Value @'
 <?xml version="1.0" encoding="utf-8"?>
 <AppDeployToolkit_Config>
@@ -526,12 +527,12 @@ Describe 'Set-PSADTBranding' {
             Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding
         }
 
-        It 'Copies the banner to AppDeployToolkit\AppDeployToolkitBanner.png' {
-            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitBanner.png'
+        It 'Copies the banner to Assets\Banner.Classic.png' {
+            $dest = Join-Path $script:BrandTestDir 'Assets' 'Banner.Classic.png'
             Test-Path $dest | Should -BeTrue
         }
         It 'Banner content matches the source file' {
-            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitBanner.png'
+            $dest = Join-Path $script:BrandTestDir 'Assets' 'Banner.Classic.png'
             Get-Content $dest | Should -Be 'PNG_FAKE'
         }
     }
@@ -545,8 +546,8 @@ Describe 'Set-PSADTBranding' {
             Set-PSADTBranding -PackagePath $script:BrandTestDir -Branding $branding
         }
 
-        It 'Copies the icon to AppDeployToolkit\AppDeployToolkitIcon.ico' {
-            $dest = Join-Path $script:BrandTestDir 'AppDeployToolkit' 'AppDeployToolkitIcon.ico'
+        It 'Copies the icon to Assets\AppIcon.png' {
+            $dest = Join-Path $script:BrandTestDir 'Assets' 'AppIcon.png'
             Test-Path $dest | Should -BeTrue
         }
     }
